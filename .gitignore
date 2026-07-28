@@ -1,0 +1,13 @@
+*.iml
+.DS_Store
+.gradle/
+.idea/
+.kotlin/
+local.properties
+build/
+**/build/
+captures/
+*.hprof
+benchmarks/ocr/results/
+benchmarks/ocr/.venv/
+tools/glm_ocr_litert/output/
