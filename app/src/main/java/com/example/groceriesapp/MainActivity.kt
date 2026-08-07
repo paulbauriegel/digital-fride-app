@@ -14,6 +14,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.core.view.WindowCompat
 import androidx.core.content.edit
+import com.example.groceriesapp.data.BioCompanyRepository
 import com.example.groceriesapp.data.GroceriesRepository
 import com.example.groceriesapp.ui.GroceriesApp
 import com.example.groceriesapp.ui.theme.GroceriesTheme
@@ -27,6 +28,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         val repository = GroceriesRepository(applicationContext)
+        val bioCompanyRepository = BioCompanyRepository(applicationContext)
         val preferences = getSharedPreferences("appearance", MODE_PRIVATE)
 
         setContent {
@@ -58,6 +60,7 @@ class MainActivity : ComponentActivity() {
             GroceriesTheme(darkTheme = darkTheme) {
                 GroceriesApp(
                     repository = repository,
+                    bioCompanyRepository = bioCompanyRepository,
                     widthSizeClass = calculateWindowSizeClass(this).widthSizeClass,
                     darkTheme = darkTheme,
                     ocrEngine = ocrEngine,

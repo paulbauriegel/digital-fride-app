@@ -14,7 +14,10 @@ import java.nio.file.Path
 import java.nio.file.SimpleFileVisitor
 import java.nio.file.StandardCopyOption
 import java.nio.file.attribute.BasicFileAttributes
+import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.UUID
+import java.util.Locale
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -288,6 +291,66 @@ class GroceriesRepository(context: Context) {
         }
     }
 
+    fun importBioCompanyReceipt(
+        merchant: String?,
+        dateIso: String,
+        totalCents: Int?,
+        items: List<ReceiptItem>,
+        bioCompanyReceiptNumber: Int?,
+        bioCompanyCheckout: Int?,
+    ): DigitalReceipt {
+        val now = System.currentTimeMillis()
+        val epochMillis = parseIsoDateToEpochMillis(dateIso)
+        val receipt = DigitalReceipt(
+            merchant = (if (merchant != null && merchant.isNotBlank()) merchant else "BIO COMPANY"),
+            dateEpochMillis = epochMillis,
+            totalCents = totalCents,
+            currency = "EUR",
+            items = items,
+            status = ReceiptStatus.READY,
+            createdAtEpochMillis = now,
+            source = ReceiptSource.BIO_COMPANY,
+            bioCompanyReceiptNumber = bioCompanyReceiptNumber,
+            bioCompanyCheckout = bioCompanyCheckout,
+        )
+        synchronized(lock) {
+            val exists = _receipts.value.any { r ->
+                r.bioCompanyReceiptNumber == bioCompanyReceiptNumber &&
+                    r.bioCompanyCheckout == bioCompanyCheckout
+            }
+            if (exists) return _receipts.value.first { r ->
+                r.bioCompanyReceiptNumber == bioCompanyReceiptNumber &&
+                    r.bioCompanyCheckout == bioCompanyCheckout
+            }
+            val updated = _receipts.value
+                .plus(receipt)
+                .sortedByDescending(DigitalReceipt::sortEpochMillis)
+            persistReceipts(updated)
+            _receipts.value = updated
+        }
+        return receipt
+    }
+
+    private fun parseIsoDateToEpochMillis(dateIso: String): Long? {
+        return runCatching {
+            val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US)
+            sdf.parse(dateIso)?.time
+        }.getOrDefault(runCatching {
+            val sdf2 = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+            sdf2.parse(dateIso)?.time
+        }.getOrNull())
+    }
+
+    fun hasBioCompanyReceipt(receiptNumber: Int?, checkout: Int?): Boolean {
+        return synchronized(lock) {
+            receiptNumber != null && checkout != null &&
+                _receipts.value.any { r ->
+                    r.bioCompanyReceiptNumber == receiptNumber &&
+                        r.bioCompanyCheckout == checkout
+                }
+        }
+    }
+
     fun addReceiptItemsToInventory(
         receiptId: String,
         itemIds: Collection<String>,
@@ -485,6 +548,9 @@ private fun DigitalReceipt.toJson(): JSONObject = JSONObject()
     .put("items", items.toJsonArray(ReceiptItem::toJson))
     .put("status", status.name)
     .put("createdAtEpochMillis", createdAtEpochMillis)
+    .put("source", source.name)
+    .putNullable("bioCompanyReceiptNumber", bioCompanyReceiptNumber)
+    .putNullable("bioCompanyCheckout", bioCompanyCheckout)
 
 private fun ReceiptTextRegion.toJson(): JSONObject = JSONObject()
     .put("id", id)
@@ -545,6 +611,9 @@ private fun JSONObject.toDigitalReceipt(): DigitalReceipt = DigitalReceipt(
     items = optJSONArray("items").toObjectList(JSONObject::toReceiptItem),
     status = enumValueOrDefault(optString("status"), ReceiptStatus.PROCESSING),
     createdAtEpochMillis = optLong("createdAtEpochMillis", 0L),
+    source = enumValueOrDefault(optString("source", "CAPTURED"), ReceiptSource.CAPTURED),
+    bioCompanyReceiptNumber = nullableInt("bioCompanyReceiptNumber"),
+    bioCompanyCheckout = nullableInt("bioCompanyCheckout"),
 )
 
 private fun JSONObject.toReceiptImageEdit(): ReceiptImageEdit {

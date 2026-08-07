@@ -38,6 +38,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -69,6 +70,8 @@ fun MoreScreen(
     onOcrEngineChanged: (OcrEngine) -> Unit,
     receiptCount: Int,
     inventoryCount: Int,
+    bioCompanyRepo: com.example.groceriesapp.data.BioCompanyRepository,
+    onOpenBioCompanyReceipts: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -81,6 +84,10 @@ fun MoreScreen(
     var importError by remember { mutableStateOf<String?>(null) }
     var liteRtImportError by remember { mutableStateOf<String?>(null) }
     val coroutineScope = rememberCoroutineScope()
+    val account by bioCompanyRepo.account.collectAsStateWithLifecycle()
+    val loginState by bioCompanyRepo.loginState.collectAsStateWithLifecycle()
+    val syncState by bioCompanyRepo.syncState.collectAsStateWithLifecycle()
+    val points by bioCompanyRepo.points.collectAsStateWithLifecycle()
     val importModel: (GlmOcrModelPart, Uri) -> Unit = { part, uri ->
         importingPart = part
         importError = null
@@ -143,6 +150,32 @@ fun MoreScreen(
         ) {
             item {
                 LocalFirstCard(receiptCount, inventoryCount, ocrEngine)
+            }
+            item {
+                SectionHeader("BIO COMPANY")
+                BioCompanyAccountCard(
+                    account = account,
+                    points = points,
+                    loginState = loginState,
+                    syncState = syncState,
+                    onLogin = { email, password ->
+                        coroutineScope.launch {
+                            bioCompanyRepo.login(email, password)
+                        }
+                    },
+                    onLogout = {
+                        coroutineScope.launch {
+                            bioCompanyRepo.logout()
+                        }
+                    },
+                    onFetchReceipts = {
+                        coroutineScope.launch {
+                            bioCompanyRepo.fetchReceipts()
+                            bioCompanyRepo.fetchPoints()
+                        }
+                    },
+                    onOpenReceipts = onOpenBioCompanyReceipts,
+                )
             }
             item {
                 SectionHeader("Appearance")

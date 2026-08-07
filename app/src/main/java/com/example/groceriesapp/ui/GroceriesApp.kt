@@ -45,6 +45,10 @@ import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.groceriesapp.data.GroceriesRepository
+import com.example.groceriesapp.data.BioCompanyRepository
+import com.example.groceriesapp.data.network.BioCompanyReceiptDetail
+import com.example.groceriesapp.data.network.BioCompanyReceiptEntry
+import com.example.groceriesapp.feature.biocompany.BioCompanyReceiptsScreen
 import com.example.groceriesapp.feature.inventory.InventoryScreen
 import com.example.groceriesapp.feature.more.MoreScreen
 import com.example.groceriesapp.feature.overview.OverviewScreen
@@ -73,6 +77,7 @@ private enum class TopLevelDestination(
 @Composable
 fun GroceriesApp(
     repository: GroceriesRepository,
+    bioCompanyRepository: BioCompanyRepository,
     widthSizeClass: WindowWidthSizeClass,
     darkTheme: Boolean,
     ocrEngine: OcrEngine,
@@ -86,6 +91,7 @@ fun GroceriesApp(
         mutableStateOf(repository.activeScanSessionId())
     }
     var reviewReceiptId by rememberSaveable { mutableStateOf<String?>(null) }
+    var showBioCompanyImport by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val expanded = widthSizeClass != WindowWidthSizeClass.Compact
     val ocrRecognizer = remember(context, ocrEngine) {
@@ -117,6 +123,16 @@ fun GroceriesApp(
                 scanKey = null
                 reviewReceiptId = receiptId
             },
+        )
+        return
+    }
+
+    if (showBioCompanyImport) {
+        BioCompanyReceiptsScreen(
+            entries = bioCompanyRepository.receipts.value,
+            onBack = { showBioCompanyImport = false },
+            groceryRepository = repository,
+            fetchDetail = { entry -> bioCompanyRepository.fetchReceiptDetail(entry) },
         )
         return
     }
@@ -187,6 +203,7 @@ fun GroceriesApp(
                 TopLevelContent(
                     destination = destination,
                     repository = repository,
+                    bioCompanyRepository = bioCompanyRepository,
                     receipts = receipts,
                     inventory = inventory,
                     darkTheme = darkTheme,
@@ -196,6 +213,7 @@ fun GroceriesApp(
                     onScan = ::beginScan,
                     onDestination = { destination = it },
                     onOpenReceipt = { reviewReceiptId = it },
+                    onOpenBioCompanyReceipts = { showBioCompanyImport = true },
                     modifier = Modifier
                         .widthIn(max = 1_040.dp)
                         .fillMaxSize(),
@@ -225,22 +243,24 @@ fun GroceriesApp(
             },
             floatingActionButtonPosition = androidx.compose.material3.FabPosition.Center,
         ) { innerPadding ->
-            TopLevelContent(
-                destination = destination,
-                repository = repository,
-                receipts = receipts,
-                inventory = inventory,
-                darkTheme = darkTheme,
-                ocrEngine = ocrEngine,
-                onDarkThemeChanged = onDarkThemeChanged,
-                onOcrEngineChanged = onOcrEngineChanged,
-                onScan = ::beginScan,
-                onDestination = { destination = it },
-                onOpenReceipt = { reviewReceiptId = it },
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding),
-            )
+                TopLevelContent(
+                    destination = destination,
+                    repository = repository,
+                    bioCompanyRepository = bioCompanyRepository,
+                    receipts = receipts,
+                    inventory = inventory,
+                    darkTheme = darkTheme,
+                    ocrEngine = ocrEngine,
+                    onDarkThemeChanged = onDarkThemeChanged,
+                    onOcrEngineChanged = onOcrEngineChanged,
+                    onScan = ::beginScan,
+                    onDestination = { destination = it },
+                    onOpenReceipt = { reviewReceiptId = it },
+                    onOpenBioCompanyReceipts = { showBioCompanyImport = true },
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(innerPadding),
+                )
         }
     }
 }
@@ -257,6 +277,7 @@ private class ScanViewModelStoreOwner : ViewModelStoreOwner {
 private fun TopLevelContent(
     destination: TopLevelDestination,
     repository: GroceriesRepository,
+    bioCompanyRepository: BioCompanyRepository,
     receipts: List<com.example.groceriesapp.data.DigitalReceipt>,
     inventory: List<com.example.groceriesapp.data.InventoryItem>,
     darkTheme: Boolean,
@@ -266,6 +287,7 @@ private fun TopLevelContent(
     onScan: () -> Unit,
     onDestination: (TopLevelDestination) -> Unit,
     onOpenReceipt: (String) -> Unit,
+    onOpenBioCompanyReceipts: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Box(modifier) {
@@ -298,6 +320,8 @@ private fun TopLevelContent(
                 onOcrEngineChanged = onOcrEngineChanged,
                 receiptCount = receipts.size,
                 inventoryCount = inventory.size,
+                bioCompanyRepo = bioCompanyRepository,
+                onOpenBioCompanyReceipts = onOpenBioCompanyReceipts,
                 modifier = Modifier.fillMaxSize(),
             )
         }

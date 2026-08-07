@@ -19,3 +19,10 @@ tools/glm_ocr_litert/output/
 /build/*
 !/build/third_party/
 !/build/third_party/**
+/build/third_party/llama.cpp-b10167/source/
+!/build/third_party/llama.cpp-b10167/.gitignore
+!/build/third_party/llama.cpp-b10167/build-android-vulkan.sh
+!/build/third_party/llama.cpp-b10167/README.md
+!/build/third_party/llama.cpp-b10167/source.tar.gz
+!/build/third_party/llama.cpp-b10167/vulkan-api26.patch
+/build/third_party/llama.cpp-b10167/source.tar.gz

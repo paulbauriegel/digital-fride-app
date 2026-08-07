@@ -2,6 +2,11 @@ package com.example.groceriesapp.data
 
 import java.util.UUID
 
+enum class ReceiptSource {
+    CAPTURED,
+    BIO_COMPANY,
+}
+
 enum class ReceiptStatus {
     PROCESSING,
     READY,
@@ -97,6 +102,9 @@ data class DigitalReceipt(
     val items: List<ReceiptItem> = emptyList(),
     val status: ReceiptStatus = ReceiptStatus.PROCESSING,
     val createdAtEpochMillis: Long = System.currentTimeMillis(),
+    val source: ReceiptSource = ReceiptSource.CAPTURED,
+    val bioCompanyReceiptNumber: Int? = null,
+    val bioCompanyCheckout: Int? = null,
 ) {
     init {
         require(id.isNotBlank()) { "Receipt ID must not be blank." }
