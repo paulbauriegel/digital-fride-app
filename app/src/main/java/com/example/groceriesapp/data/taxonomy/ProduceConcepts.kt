@@ -258,7 +258,8 @@ internal val produceConcepts: List<FoodConcept> = listOf(
         category = GroceryCategory.VEGETABLES,
         displayName = "Potato",
         iconRes = R.drawable.ic_food_potato,
-        keywords = listOf("kartoffel"),
+        // "kart." catches REWE's abbreviated forms, e.g. "KART.VF.BIO" (vorwiegend festkochend).
+        keywords = listOf("kartoffel", "kart."),
     ),
     FoodConcept(
         id = "SWEET_POTATO",

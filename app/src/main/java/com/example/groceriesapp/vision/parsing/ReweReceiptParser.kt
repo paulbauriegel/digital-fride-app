@@ -15,7 +15,8 @@ data class ReweLineItem(
     val taxFlag: String,
     val isDeposit: Boolean,
     val quantity: Double,
-    val unit: String,
+    /** Only set when the eBon prints an explicit quantity line ("2 Stk x" / "0,830 kg x"). */
+    val unit: String?,
     val pricePerUnitCents: Long?,
     val discounts: List<ReweDiscount>,
 ) {
@@ -87,7 +88,9 @@ class ReweReceiptParser {
         val taxFlag: String,
         val isDeposit: Boolean,
         var quantity: Double = 1.0,
-        var unit: String = "Stk",
+        // A bare item line says nothing about its unit — it could just as well be a 500 g pack,
+        // so no piece unit is assumed.
+        var unit: String? = null,
         var pricePerUnitCents: Long? = null,
         val discounts: MutableList<ReweDiscount> = mutableListOf(),
     ) {
@@ -122,7 +125,7 @@ fun ReweLineItem.categoryName(): String =
 fun ReweLineItem.foodConceptId(): String? = FoodConceptCatalog.match(name)?.id
 
 /** REWE writes piece counts as "Stk"; the rest of the app uses "pc". */
-fun ReweLineItem.normalizedUnit(): String = when (unit.lowercase(Locale.ROOT)) {
+fun ReweLineItem.normalizedUnit(): String? = when (val lowered = unit?.lowercase(Locale.ROOT)) {
     "stk" -> "pc"
-    else -> unit.lowercase(Locale.ROOT)
+    else -> lowered
 }

@@ -65,6 +65,9 @@ fun formatExpiry(item: InventoryItem): String {
 
 private fun dayWord(days: Long): String = if (days == 1L) "day" else "days"
 
+fun formatQuantity(value: Double): String =
+    if (value % 1.0 == 0.0) value.toInt().toString() else "%.2f".format(value)
+
 fun formatDateTime(epochMillis: Long): String {
     val formatter = DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM, FormatStyle.SHORT)
     return Instant.ofEpochMilli(epochMillis)

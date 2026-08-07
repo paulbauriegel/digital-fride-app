@@ -35,6 +35,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
@@ -48,12 +49,15 @@ import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.ZoomIn
 import androidx.compose.material.icons.filled.ZoomOut
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FilterChip
@@ -101,13 +105,17 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.example.groceriesapp.data.DigitalReceipt
+import com.example.groceriesapp.data.LocationSource
 import com.example.groceriesapp.data.ReceiptImageEdit
 import com.example.groceriesapp.data.ReceiptItem
+import com.example.groceriesapp.data.ReceiptItemSelection
 import com.example.groceriesapp.data.ReceiptTextRegion
+import com.example.groceriesapp.data.taxonomy.StorageLocation
 import com.example.groceriesapp.data.taxonomy.resolveCategory
 import com.example.groceriesapp.ui.components.InitialsBadge
 import com.example.groceriesapp.ui.components.MerchantBadge
 import com.example.groceriesapp.ui.formatCurrency
+import com.example.groceriesapp.ui.formatQuantity
 import com.example.groceriesapp.ui.formatReceiptTimestamp
 import com.example.groceriesapp.ui.formatDate
 import com.example.groceriesapp.ui.theme.spacing
@@ -130,19 +138,20 @@ fun ReceiptReviewScreen(
     onRescan: () -> Unit,
     onApplyImageEdit: suspend (ReceiptImageEdit) -> Unit,
     onRerunOcr: suspend () -> Unit,
-    onAddItemsToInventory: (Set<String>) -> Unit,
+    onAddItemsToInventory: (List<ReceiptItemSelection>) -> Unit,
+    suggestLocation: (ReceiptItem) -> StorageLocation,
 ) {
     var showDeleteDialog by rememberSaveable { mutableStateOf(false) }
     var showItemsSheet by rememberSaveable { mutableStateOf(false) }
     var selectedItemIds by remember(receipt.id) {
-        mutableStateOf(
-            receipt.items
-                .filterNot(ReceiptItem::needsReview)
-                .filterNot(ReceiptItem::isDepositLine)
-                .map(ReceiptItem::id)
-                .toSet(),
-        )
+        mutableStateOf(receipt.items.defaultSelectionIds())
     }
+    // Suggested destination per item; ids the user overrode keep their choice across OCR reruns
+    // and are flagged USER on import so later re-suggestion passes leave them alone.
+    var itemLocations by remember(receipt.id) {
+        mutableStateOf(receipt.items.associate { it.id to suggestLocation(it) })
+    }
+    var userSetLocationIds by remember(receipt.id) { mutableStateOf(emptySet<String>()) }
     var selectedRegionId by rememberSaveable { mutableStateOf<String?>(null) }
     var imported by rememberSaveable { mutableStateOf(false) }
     var showImageEditor by rememberSaveable { mutableStateOf(false) }
@@ -171,11 +180,26 @@ fun ReceiptReviewScreen(
     }
 
     LaunchedEffect(receipt.items) {
-        selectedItemIds = receipt.items
-            .filterNot(ReceiptItem::needsReview)
-            .filterNot(ReceiptItem::isDepositLine)
-            .map(ReceiptItem::id)
-            .toSet()
+        selectedItemIds = receipt.items.defaultSelectionIds()
+        itemLocations = receipt.items.associate { item ->
+            item.id to if (item.id in userSetLocationIds) {
+                itemLocations[item.id] ?: suggestLocation(item)
+            } else {
+                suggestLocation(item)
+            }
+        }
+    }
+
+    fun buildSelections(): List<ReceiptItemSelection> = selectedItemIds.map { id ->
+        ReceiptItemSelection(
+            receiptItemId = id,
+            storageLocation = itemLocations[id] ?: StorageLocation.PANTRY,
+            locationSource = if (id in userSetLocationIds) {
+                LocationSource.USER
+            } else {
+                LocationSource.SUGGESTED
+            },
+        )
     }
 
     Scaffold(
@@ -258,10 +282,15 @@ fun ReceiptReviewScreen(
                     receipt = receipt,
                     selectedItemIds = selectedItemIds,
                     onSelectionChanged = { selectedItemIds = it },
+                    itemLocations = itemLocations,
+                    onLocationChanged = { itemId, location ->
+                        itemLocations = itemLocations + (itemId to location)
+                        userSetLocationIds = userSetLocationIds + itemId
+                    },
                     onSelectRegion = { selectedRegionId = it },
                     imported = imported,
                     onAdd = {
-                        onAddItemsToInventory(selectedItemIds)
+                        onAddItemsToInventory(buildSelections())
                         imported = true
                     },
                     onRescan = onRescan,
@@ -311,13 +340,18 @@ fun ReceiptReviewScreen(
                 receipt = receipt,
                 selectedItemIds = selectedItemIds,
                 onSelectionChanged = { selectedItemIds = it },
+                itemLocations = itemLocations,
+                onLocationChanged = { itemId, location ->
+                    itemLocations = itemLocations + (itemId to location)
+                    userSetLocationIds = userSetLocationIds + itemId
+                },
                 onSelectRegion = {
                     selectedRegionId = it
                     showItemsSheet = false
                 },
                 imported = imported,
                 onAdd = {
-                    onAddItemsToInventory(selectedItemIds)
+                    onAddItemsToInventory(buildSelections())
                     imported = true
                 },
                 onRescan = onRescan,
@@ -1041,6 +1075,8 @@ private fun ReviewPanel(
     receipt: DigitalReceipt,
     selectedItemIds: Set<String>,
     onSelectionChanged: (Set<String>) -> Unit,
+    itemLocations: Map<String, StorageLocation>,
+    onLocationChanged: (String, StorageLocation) -> Unit,
     onSelectRegion: (String?) -> Unit,
     imported: Boolean,
     onAdd: () -> Unit,
@@ -1111,6 +1147,8 @@ private fun ReviewPanel(
                                 else selectedItemIds - item.id,
                             )
                         },
+                        location = itemLocations[item.id],
+                        onLocationChange = { onLocationChanged(item.id, it) },
                         onLocate = { onSelectRegion(item.textRegionId) },
                     )
                 }
@@ -1161,11 +1199,6 @@ private fun ReviewPanel(
             Spacer(Modifier.width(8.dp))
             Text(if (rerunningOcr) "Running OCR…" else "Run OCR again")
         }
-        Text(
-            "Expiry dates remain unknown until you set them.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
     }
 }
 
@@ -1174,8 +1207,13 @@ private fun ReviewItemRow(
     item: ReceiptItem,
     selected: Boolean,
     onSelectedChanged: (Boolean) -> Unit,
+    location: StorageLocation?,
+    onLocationChange: (StorageLocation) -> Unit,
     onLocate: () -> Unit,
 ) {
+    // Household goods and unrecognized rows can be imported, but a storage location is
+    // meaningless for them, so the chip only appears on food rows.
+    val supportsStorage = resolveCategory(item.category, item.name).supportsExpiry
     Card(
         colors = CardDefaults.cardColors(
             containerColor = if (selected) {
@@ -1206,6 +1244,35 @@ private fun ReviewItemRow(
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.tertiary,
                     )
+                }
+                if (selected && supportsStorage && location != null) {
+                    var locationMenuOpen by remember { mutableStateOf(false) }
+                    Box {
+                        AssistChip(
+                            onClick = { locationMenuOpen = true },
+                            label = { Text(location.displayName) },
+                            trailingIcon = {
+                                Icon(
+                                    Icons.Default.ArrowDropDown,
+                                    contentDescription = "Change storage location",
+                                )
+                            },
+                        )
+                        DropdownMenu(
+                            expanded = locationMenuOpen,
+                            onDismissRequest = { locationMenuOpen = false },
+                        ) {
+                            StorageLocation.entries.forEach { option ->
+                                DropdownMenuItem(
+                                    text = { Text(option.displayName) },
+                                    onClick = {
+                                        onLocationChange(option)
+                                        locationMenuOpen = false
+                                    },
+                                )
+                            }
+                        }
+                    }
                 }
             }
             Text(
@@ -1598,9 +1665,6 @@ private fun ReceiptTileImage(
     }
 }
 
-private fun formatQuantity(value: Double): String =
-    if (value % 1.0 == 0.0) value.toInt().toString() else "%.2f".format(value)
-
 /**
  * Bottle/container deposit lines (e.g. "Pfand Fl") are real receipt rows but not groceries, so they
  * default to unselected. Local scans already drop these during parsing (see
@@ -1608,3 +1672,15 @@ private fun formatQuantity(value: Double): String =
  * such as BIO COMPANY orders carry item names verbatim from the source API and skip that filter.
  */
 private fun ReceiptItem.isDepositLine(): Boolean = name.contains("pfand", ignoreCase = true)
+
+/**
+ * Items pre-ticked for import: confidently parsed food rows. Deposit lines, rows needing review,
+ * and non-food rows (household goods, unrecognized text) start unchecked — "don't add" by default,
+ * one tap to include anyway.
+ */
+private fun List<ReceiptItem>.defaultSelectionIds(): Set<String> = this
+    .filterNot(ReceiptItem::needsReview)
+    .filterNot(ReceiptItem::isDepositLine)
+    .filter { resolveCategory(it.category, it.name).supportsExpiry }
+    .map(ReceiptItem::id)
+    .toSet()

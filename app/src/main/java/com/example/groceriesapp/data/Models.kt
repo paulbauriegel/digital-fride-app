@@ -115,6 +115,30 @@ data class DigitalReceipt(
     }
 }
 
+/** How an [InventoryItem.storageLocation] came to be set. */
+enum class LocationSource {
+    /** Assigned by [com.example.groceriesapp.data.taxonomy.StorageLocationSuggester]; may be re-suggested. */
+    SUGGESTED,
+
+    /** Chosen by the user; never overwritten automatically. */
+    USER,
+}
+
+/** Coarse remaining-amount state. Null on an item means the amount isn't tracked. */
+enum class FillLevel(val displayName: String) {
+    FULL("Full"),
+    HALF("Half"),
+    LOW("Low"),
+    EMPTY("Empty"),
+}
+
+/** One receipt item the user chose to import, with the storage location it should land in. */
+data class ReceiptItemSelection(
+    val receiptItemId: String,
+    val storageLocation: com.example.groceriesapp.data.taxonomy.StorageLocation,
+    val locationSource: LocationSource,
+)
+
 data class InventoryItem(
     val name: String,
     val category: String? = null,
@@ -122,6 +146,14 @@ data class InventoryItem(
     val quantity: Double = 1.0,
     val unit: String? = null,
     val priceCents: Int? = null,
+    /** [com.example.groceriesapp.data.taxonomy.StorageLocation] name, or null before migration. */
+    val storageLocation: String? = null,
+    /** [LocationSource] name; SUGGESTED locations may be re-suggested on launch, USER never is. */
+    val locationSource: String? = null,
+    /** When the item last moved between locations; re-anchors the expiry estimate. */
+    val locationChangedAtEpochMillis: Long? = null,
+    /** [FillLevel] name, or null when the remaining amount isn't tracked. */
+    val fillLevel: String? = null,
     val purchasedAtEpochMillis: Long? = null,
     /** Earliest edge of the estimated window, or the exact date when read off packaging. */
     val expiresAtEpochMillis: Long? = null,
@@ -143,6 +175,17 @@ data class InventoryItem(
         require(id.isNotBlank()) { "Inventory item ID must not be blank." }
     }
 }
+
+/**
+ * True when the quantity reads as a count of pieces, so stepping it by ±1 makes sense
+ * (three yogurts → two). Weight/volume amounts ("500 g", "1.5 l") are not steppable, and an
+ * unknown unit is not assumed to mean pieces — a bare receipt line could be a 500 g pack.
+ */
+val InventoryItem.isCountable: Boolean
+    get() = quantity % 1.0 == 0.0 &&
+        unit?.trim()?.lowercase() in COUNTABLE_UNITS
+
+private val COUNTABLE_UNITS = setOf("pc", "pcs", "st", "st.", "stk", "stk.", "stück", "x")
 
 data class ScanSession(
     val id: String,

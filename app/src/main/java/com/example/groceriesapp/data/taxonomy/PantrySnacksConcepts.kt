@@ -50,12 +50,15 @@ internal val pantrySnacksConcepts: List<FoodConcept> = listOf(
             "bratkartoffel", "bratkrt", "fertiggericht",
             // Only ever appears in fried noodle/rice dishes (Bami/Nasi Goreng), all prepared meals.
             "goreng",
+            "butter chicken",
         ),
-        // These must outrank the ingredient concepts they contain — SPICE_MIX's "curry" and
-        // POTATO's "kartoffel" — since the product is a prepared dish, not the raw ingredient.
+        // These must outrank the ingredient concepts they contain — SPICE_MIX's "curry",
+        // POTATO's "kartoffel", BUTTER's "butter" — since the product is a prepared dish,
+        // not the raw ingredient.
         priorityKeywords = listOf(
             "rotes curry", "gruenes curry", "grünes curry",
             "bratkartoffel", "bratkrt", "fertiggericht",
+            "butter chicken",
         ),
     ),
     // SNACKS_SWEETS

@@ -23,6 +23,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.example.groceriesapp.data.taxonomy.StorageLocation
 import com.example.groceriesapp.ui.theme.spacing
 
 @Composable
@@ -71,6 +72,31 @@ fun EmptyStateCard(
                 Text(actionLabel)
             }
         }
+    }
+}
+
+/** Compact pill naming where an item is kept, e.g. on inventory rows and "use soon" cards. */
+@Composable
+fun LocationBadge(
+    location: StorageLocation,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier,
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+    ) {
+        Text(
+            text = location.displayName,
+            style = MaterialTheme.typography.labelSmall,
+            maxLines = 1,
+            softWrap = false,
+            modifier = Modifier.padding(
+                horizontal = MaterialTheme.spacing.small,
+                vertical = MaterialTheme.spacing.extraSmall / 2,
+            ),
+        )
     }
 }
 

@@ -2,6 +2,7 @@ package com.example.groceriesapp.feature.inventory
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -14,17 +15,21 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Inventory2
-import androidx.compose.material.icons.filled.LockOpen
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -33,11 +38,15 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -48,32 +57,59 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.example.groceriesapp.data.ConsumptionReason
+import com.example.groceriesapp.data.FillLevel
 import com.example.groceriesapp.data.InventoryItem
 import com.example.groceriesapp.data.taxonomy.FoodConceptCatalog
 import com.example.groceriesapp.data.taxonomy.GroceryCategory
+import com.example.groceriesapp.data.isCountable
+import com.example.groceriesapp.data.taxonomy.StorageLocation
 import com.example.groceriesapp.data.taxonomy.resolveCategory
 import com.example.groceriesapp.data.taxonomy.resolveIconRes
 import com.example.groceriesapp.ui.components.EmptyStateCard
+import com.example.groceriesapp.ui.components.LocationBadge
 import com.example.groceriesapp.ui.formatExpiry
+import com.example.groceriesapp.ui.formatQuantity
 import com.example.groceriesapp.ui.theme.spacing
+
+private enum class InventorySortOrder(val label: String) {
+    RECENTLY_ADDED("Recently added"),
+    EXPIRY("Expiry date"),
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun InventoryScreen(
     inventory: List<InventoryItem>,
     onAddItem: (InventoryItem) -> Unit,
-    onRemoveItem: (String) -> Unit,
+    onRemoveItem: (String, ConsumptionReason?) -> Unit,
     onMarkOpened: (String) -> Unit,
+    onSetLocation: (String, StorageLocation) -> Unit,
+    onSetFillLevel: (String, FillLevel?) -> Unit,
+    onAdjustQuantity: (String, Double) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var query by rememberSaveable { mutableStateOf("") }
     var category by rememberSaveable { mutableStateOf<GroceryCategory?>(null) }
+    var locationFilter by rememberSaveable { mutableStateOf<StorageLocation?>(null) }
+    var sortOrder by rememberSaveable { mutableStateOf(InventorySortOrder.RECENTLY_ADDED) }
     var showAddDialog by rememberSaveable { mutableStateOf(false) }
-    val filtered = remember(inventory, query, category) {
-        inventory.filter { item ->
+    var sheetItemId by rememberSaveable { mutableStateOf<String?>(null) }
+    var removeItemId by rememberSaveable { mutableStateOf<String?>(null) }
+    val filtered = remember(inventory, query, category, locationFilter, sortOrder) {
+        val matching = inventory.filter { item ->
             (query.isBlank() || item.name.contains(query, ignoreCase = true)) &&
-                (category == null || resolveCategory(item.category, item.name) == category)
+                (category == null || resolveCategory(item.category, item.name) == category) &&
+                (locationFilter == null || item.storageLocation == locationFilter?.name)
+        }
+        when (sortOrder) {
+            // The repository already delivers newest-first.
+            InventorySortOrder.RECENTLY_ADDED -> matching
+            InventorySortOrder.EXPIRY -> matching.sortedWith(
+                compareBy<InventoryItem, Long?>(nullsLast()) { it.expiresAtEpochMillis },
+            )
         }
     }
 
@@ -125,6 +161,28 @@ fun InventoryScreen(
                     .fillMaxWidth()
                     .padding(horizontal = MaterialTheme.spacing.medium),
             )
+            SingleChoiceSegmentedButtonRow(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(
+                        start = MaterialTheme.spacing.medium,
+                        end = MaterialTheme.spacing.medium,
+                        top = MaterialTheme.spacing.small,
+                    ),
+            ) {
+                val options = listOf<StorageLocation?>(null) + StorageLocation.entries
+                options.forEachIndexed { index, option ->
+                    SegmentedButton(
+                        selected = locationFilter == option,
+                        onClick = { locationFilter = option },
+                        shape = SegmentedButtonDefaults.itemShape(
+                            index = index,
+                            count = options.size,
+                        ),
+                        label = { Text(option?.displayName ?: "All") },
+                    )
+                }
+            }
             LazyRow(
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(
                     horizontal = MaterialTheme.spacing.medium,
@@ -165,6 +223,7 @@ fun InventoryScreen(
                     onAction = {
                         query = ""
                         category = null
+                        locationFilter = null
                     },
                     icon = Icons.Default.Search,
                     modifier = Modifier.padding(MaterialTheme.spacing.medium),
@@ -179,18 +238,55 @@ fun InventoryScreen(
                     verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small),
                 ) {
                     item {
-                        Text(
-                            "${filtered.size} ${if (filtered.size == 1) "item" else "items"}",
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(vertical = MaterialTheme.spacing.small),
-                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            Text(
+                                "${filtered.size} ${if (filtered.size == 1) "item" else "items"}",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            var sortMenuOpen by remember { mutableStateOf(false) }
+                            Box {
+                                TextButton(onClick = { sortMenuOpen = true }) {
+                                    Icon(
+                                        Icons.Default.SwapVert,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp),
+                                    )
+                                    Text(
+                                        text = sortOrder.label,
+                                        modifier = Modifier.padding(
+                                            start = MaterialTheme.spacing.extraSmall,
+                                        ),
+                                    )
+                                }
+                                DropdownMenu(
+                                    expanded = sortMenuOpen,
+                                    onDismissRequest = { sortMenuOpen = false },
+                                ) {
+                                    InventorySortOrder.entries.forEach { option ->
+                                        DropdownMenuItem(
+                                            text = { Text(option.label) },
+                                            onClick = {
+                                                sortOrder = option
+                                                sortMenuOpen = false
+                                            },
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
                     items(filtered, key = InventoryItem::id) { item ->
                         InventoryRow(
                             item = item,
-                            onRemove = { onRemoveItem(item.id) },
-                            onMarkOpened = { onMarkOpened(item.id) },
+                            onClick = { sheetItemId = item.id },
+                            onIncrement = { onAdjustQuantity(item.id, 1.0) },
+                            onDecrement = { onAdjustQuantity(item.id, -1.0) },
+                            onDelete = { removeItemId = item.id },
                         )
                     }
                 }
@@ -207,15 +303,53 @@ fun InventoryScreen(
             },
         )
     }
+
+    // Resolved from the live list so repository updates (location, fill level, opened) render
+    // immediately; the sheet dismisses itself when the item is removed.
+    val sheetItem = sheetItemId?.let { id -> inventory.firstOrNull { it.id == id } }
+    LaunchedEffect(sheetItemId, sheetItem) {
+        if (sheetItemId != null && sheetItem == null) sheetItemId = null
+    }
+    if (sheetItem != null) {
+        InventoryItemSheet(
+            item = sheetItem,
+            onDismiss = { sheetItemId = null },
+            onSetLocation = { location -> onSetLocation(sheetItem.id, location) },
+            onSetFillLevel = { level -> onSetFillLevel(sheetItem.id, level) },
+            onMarkOpened = { onMarkOpened(sheetItem.id) },
+            onRemove = { reason ->
+                onRemoveItem(sheetItem.id, reason)
+                sheetItemId = null
+            },
+        )
+    }
+
+    val removeItem = removeItemId?.let { id -> inventory.firstOrNull { it.id == id } }
+    LaunchedEffect(removeItemId, removeItem) {
+        if (removeItemId != null && removeItem == null) removeItemId = null
+    }
+    if (removeItem != null) {
+        RemoveItemChoiceDialog(
+            itemName = removeItem.name,
+            onChoose = { reason ->
+                onRemoveItem(removeItem.id, reason)
+                removeItemId = null
+            },
+            onDismiss = { removeItemId = null },
+        )
+    }
 }
 
 @Composable
 private fun InventoryRow(
     item: InventoryItem,
-    onRemove: () -> Unit,
-    onMarkOpened: () -> Unit,
+    onClick: () -> Unit,
+    onIncrement: () -> Unit,
+    onDecrement: () -> Unit,
+    onDelete: () -> Unit,
 ) {
     Card(
+        onClick = onClick,
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainer,
         ),
@@ -247,31 +381,71 @@ private fun InventoryRow(
                     text = buildString {
                         append(formatQuantity(item.quantity))
                         item.unit?.takeIf(String::isNotBlank)?.let { append(" $it") }
+                        item.fillLevel?.let { level ->
+                            FillLevel.entries.firstOrNull { it.name == level }
+                                ?.let { append(" (${it.displayName.lowercase()})") }
+                        }
                         append(" • ")
                         append(resolveCategory(item.category, item.name).displayName)
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                Text(
-                    text = buildString {
-                        append(formatExpiry(item))
-                        if (item.openedAtEpochMillis != null) append(" • opened")
-                    },
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            if (item.openedAtEpochMillis == null) {
-                IconButton(onClick = onMarkOpened) {
-                    Icon(
-                        Icons.Default.LockOpen,
-                        contentDescription = "Mark ${item.name} as opened",
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.extraSmall),
+                ) {
+                    Text(
+                        text = buildString {
+                            append(formatExpiry(item))
+                            if (item.openedAtEpochMillis != null) append(" • opened")
+                        },
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false),
                     )
+                    StorageLocation.fromStorageValue(item.storageLocation)?.let { location ->
+                        LocationBadge(location)
+                    }
                 }
             }
-            IconButton(onClick = onRemove) {
-                Icon(Icons.Default.DeleteOutline, contentDescription = "Remove ${item.name}")
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.extraSmall),
+            ) {
+                if (item.isCountable) {
+                    IconButton(
+                        onClick = onIncrement,
+                        modifier = Modifier.size(36.dp),
+                    ) {
+                        Icon(
+                            Icons.Default.Add,
+                            contentDescription = "One ${item.name} more",
+                        )
+                    }
+                }
+                // On the last piece the bin takes the minus slot, so counting down naturally
+                // ends in the removal question.
+                if (item.isCountable && item.quantity > 1.0) {
+                    IconButton(
+                        onClick = onDecrement,
+                        modifier = Modifier.size(36.dp),
+                    ) {
+                        Icon(
+                            Icons.Default.Remove,
+                            contentDescription = "One ${item.name} less",
+                        )
+                    }
+                } else {
+                    IconButton(
+                        onClick = onDelete,
+                        modifier = Modifier.size(36.dp),
+                    ) {
+                        Icon(Icons.Default.DeleteOutline, contentDescription = "Remove ${item.name}")
+                    }
+                }
             }
         }
     }
@@ -284,7 +458,8 @@ private fun AddInventoryItemDialog(
 ) {
     var name by rememberSaveable { mutableStateOf("") }
     var quantity by rememberSaveable { mutableStateOf("1") }
-    var unit by rememberSaveable { mutableStateOf("pc") }
+    // No unit is prefilled — "pc" would silently mislabel weight-packed goods.
+    var unit by rememberSaveable { mutableStateOf("") }
     // Derived from the name until the user picks a chip, so typing "Vollmilch" lands in Dairy.
     var chosenCategory by rememberSaveable { mutableStateOf<GroceryCategory?>(null) }
     val concept = remember(name) { FoodConceptCatalog.match(name) }
@@ -366,6 +541,3 @@ private fun AddInventoryItemDialog(
         },
     )
 }
-
-private fun formatQuantity(value: Double): String =
-    if (value % 1.0 == 0.0) value.toInt().toString() else "%.2f".format(value)

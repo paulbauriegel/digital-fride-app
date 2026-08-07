@@ -15,7 +15,8 @@ import java.util.Locale
 data class ParsedLineItem(
     val name: String,
     val quantity: Double = 1.0,
-    val unit: String = "pc",
+    /** Null when the receipt line doesn't say — a bare line could be a 500 g pack, not pieces. */
+    val unit: String? = null,
     val lineTotalCents: Long,
     /** Canonical [GroceryCategory] name, e.g. "DAIRY". */
     val category: String,
@@ -122,10 +123,12 @@ class ReceiptParser(
             ?.toDoubleOrNull()
             ?: leadingCountMatch?.groupValues?.get(1)?.toDoubleOrNull()
             ?: 1.0
+        // "pc" only when the line literally counts pieces ("2x Joghurt"); a bare line's unit is
+        // unknown, not pieces.
         val unit = quantityMatch?.groupValues?.get(2)
             ?.lowercase(Locale.ROOT)
             ?.let(::normalizeUnit)
-            ?: "pc"
+            ?: if (leadingCountMatch != null) "pc" else null
         val cleanedName = rawName
             .replace(QUANTITY, "")
             .replace(LEADING_COUNT, "")

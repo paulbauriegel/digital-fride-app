@@ -5,6 +5,8 @@ import com.example.groceriesapp.data.taxonomy.ExpiryEstimator
 import com.example.groceriesapp.data.taxonomy.FoodConceptCatalog
 import com.example.groceriesapp.data.taxonomy.GroceryCategory
 import com.example.groceriesapp.data.taxonomy.ShelfLifeCatalog
+import com.example.groceriesapp.data.taxonomy.StorageLocation
+import com.example.groceriesapp.data.taxonomy.StorageLocationSuggester
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
@@ -36,17 +38,24 @@ class GroceriesRepository(context: Context) {
         .also(::ensureDirectory)
     private val inventoryRoot = File(storageRoot, INVENTORY_DIRECTORY)
         .also(::ensureDirectory)
+    private val consumptionRoot = File(storageRoot, CONSUMPTION_DIRECTORY)
+        .also(::ensureDirectory)
     private val receiptIndexFile = File(receiptsRoot, INDEX_FILE)
     private val inventoryIndexFile = File(inventoryRoot, INDEX_FILE)
+    private val consumptionLogFile = File(consumptionRoot, CONSUMPTION_LOG_FILE)
     private val activeScanFile = File(receiptsRoot, ACTIVE_SCAN_FILE)
 
-    private val expiryEstimator = ExpiryEstimator(ShelfLifeCatalog.fromAssets(context))
+    private val shelfLifeCatalog = ShelfLifeCatalog.fromAssets(context)
+    private val expiryEstimator = ExpiryEstimator(shelfLifeCatalog)
 
     private val _receipts = MutableStateFlow(loadReceipts())
     val receipts: StateFlow<List<DigitalReceipt>> = _receipts.asStateFlow()
 
     private val _inventory = MutableStateFlow(loadInventory())
     val inventory: StateFlow<List<InventoryItem>> = _inventory.asStateFlow()
+
+    private val _consumptionEvents = MutableStateFlow(loadConsumptionEvents())
+    val consumptionEvents: StateFlow<List<ConsumptionEvent>> = _consumptionEvents.asStateFlow()
 
     init {
         normalizeStoredDataIfNeeded()
@@ -69,7 +78,8 @@ class GroceriesRepository(context: Context) {
             }
 
             val inventory = _inventory.value
-            val normalizedInventory = inventory.map(::normalizeInventoryItem)
+            val normalizedInventory = mergeDuplicateInventoryItems(inventory)
+                .map(::normalizeInventoryItem)
             if (normalizedInventory != inventory) {
                 persistInventory(normalizedInventory)
                 _inventory.value = normalizedInventory
@@ -96,16 +106,85 @@ class GroceriesRepository(context: Context) {
         val category = concept?.category
             ?: GroceryCategory.fromStorageValue(item.category, item.name)
         val normalized = item.copy(category = category.name, foodConceptId = concept?.id)
+            .withSuggestedLocationUnlessUserSet(category, concept?.id)
         // Always recompute rather than only filling in a missing/stale-classification estimate:
         // nothing here is ever user-authored (there's no UI to hand-set an expiry date yet), so a
         // fresh estimate can never clobber something the user typed. This also self-heals items
         // whose stored estimate predates a shelf-life data fix, not just a classification fix —
         // e.g. a concept gaining a proper rule where it used to fall back to its category. Once
         // printed-date OCR lands, this stays safe: ExpiryEstimator checks printedDateEpochMillis
-        // first regardless, so a real printed date still wins over the algorithmic guess.
+        // first regardless, so a real printed date still wins over the algorithmic guess. The
+        // storage location is user-authored state, but the estimator receives it as an input, so
+        // the recompute respects it rather than overwriting it.
         return normalized.withEstimatedExpiry(
             purchasedAtEpochMillis = normalized.purchasedAtEpochMillis
                 ?: normalized.addedAtEpochMillis,
+        )
+    }
+
+    /**
+     * Collapses duplicate rows of the same product bought the same day (same receipt, or both
+     * manual) into one entry with a summed quantity — "3 × Joghurt" imported as three lines by an
+     * older app version becomes one row with quantity 3. Runs in the launch normalize pass, so
+     * pre-merge data heals itself; new imports already arrive merged.
+     */
+    private fun mergeDuplicateInventoryItems(items: List<InventoryItem>): List<InventoryItem> {
+        fun keyOf(item: InventoryItem) = Triple(
+            item.receiptId,
+            mergeKeyOf(item.name, item.unit),
+            java.time.Instant
+                .ofEpochMilli(item.purchasedAtEpochMillis ?: item.addedAtEpochMillis)
+                .atZone(java.time.ZoneId.systemDefault())
+                .toLocalDate(),
+        )
+
+        val groups = items.groupBy(::keyOf)
+        if (groups.size == items.size) return items
+        return items.mapNotNull { item ->
+            val group = groups.getValue(keyOf(item))
+            when {
+                group.size == 1 -> item
+                // Only the group's first occurrence survives, carrying the combined state.
+                group.first().id != item.id -> null
+                else -> {
+                    val userLocated = group.firstOrNull {
+                        it.locationSource == LocationSource.USER.name
+                    }
+                    item.copy(
+                        quantity = group.sumOf(InventoryItem::quantity),
+                        priceCents = group.mapNotNull(InventoryItem::priceCents)
+                            .takeIf { it.isNotEmpty() }?.sum(),
+                        openedAtEpochMillis = group
+                            .mapNotNull(InventoryItem::openedAtEpochMillis).minOrNull(),
+                        fillLevel = group.firstNotNullOfOrNull(InventoryItem::fillLevel),
+                        storageLocation = userLocated?.storageLocation ?: item.storageLocation,
+                        locationSource = userLocated?.locationSource ?: item.locationSource,
+                        locationChangedAtEpochMillis = userLocated?.locationChangedAtEpochMillis
+                            ?: item.locationChangedAtEpochMillis,
+                    )
+                }
+            }
+        }
+    }
+
+    /**
+     * Assigns (or re-suggests) a storage location. Locations the user picked are never touched;
+     * SUGGESTED ones track the current suggestion so catalogue fixes propagate — the same
+     * philosophy as the re-match-by-name normalization above.
+     */
+    private fun InventoryItem.withSuggestedLocationUnlessUserSet(
+        category: GroceryCategory,
+        conceptId: String?,
+    ): InventoryItem {
+        if (locationSource == LocationSource.USER.name) return this
+        val suggested = StorageLocationSuggester.suggest(
+            category = category,
+            conceptRule = shelfLifeCatalog.conceptRule(conceptId),
+        )
+        if (storageLocation == suggested.name) return this
+        return copy(
+            storageLocation = suggested.name,
+            locationSource = LocationSource.SUGGESTED.name,
         )
     }
 
@@ -119,6 +198,8 @@ class GroceriesRepository(context: Context) {
             purchasedAtEpochMillis = purchasedAtEpochMillis,
             openedAtEpochMillis = openedAtEpochMillis,
             printedDateEpochMillis = printedDateEpochMillis,
+            location = StorageLocation.fromStorageValue(storageLocation),
+            locationChangedAtEpochMillis = locationChangedAtEpochMillis,
         ) ?: return this
         return copy(
             expiresAtEpochMillis = estimate.expiresAtEpochMillis,
@@ -148,6 +229,84 @@ class GroceriesRepository(context: Context) {
             persistInventory(updated)
             _inventory.value = updated
             return reestimated
+        }
+    }
+
+    /** Where an item with this classification is normally kept; used to pre-fill import review. */
+    fun suggestStorageLocation(
+        foodConceptId: String?,
+        categoryStorageValue: String?,
+        nameHint: String? = null,
+    ): StorageLocation {
+        val concept = FoodConceptCatalog.byId(foodConceptId)
+            ?: nameHint?.let(FoodConceptCatalog::match)
+        val category = concept?.category
+            ?: GroceryCategory.fromStorageValue(categoryStorageValue, nameHint)
+        return StorageLocationSuggester.suggest(
+            category = category,
+            conceptRule = shelfLifeCatalog.conceptRule(concept?.id),
+        )
+    }
+
+    /**
+     * Moves an item between locations and re-estimates its window from the move date, since the
+     * destination's storage life differs (freezing extends it, thawing shortens it).
+     */
+    fun setInventoryItemStorageLocation(id: String, location: StorageLocation): InventoryItem? {
+        synchronized(lock) {
+            val current = _inventory.value
+            val existing = current.firstOrNull { it.id == id } ?: return null
+            if (existing.storageLocation == location.name) return existing
+
+            val moved = existing.copy(
+                storageLocation = location.name,
+                locationSource = LocationSource.USER.name,
+                locationChangedAtEpochMillis = System.currentTimeMillis(),
+            )
+            val reestimated = moved
+                .copy(expiresAtEpochMillis = null, expiryRangeEndEpochMillis = null)
+                .withEstimatedExpiry(moved.purchasedAtEpochMillis ?: moved.addedAtEpochMillis)
+                // Keep the original date if nothing better could be derived.
+                .let { if (it.expiresAtEpochMillis == null) moved else it }
+
+            val updated = current.map { if (it.id == id) reestimated else it }
+            persistInventory(updated)
+            _inventory.value = updated
+            return reestimated
+        }
+    }
+
+    /**
+     * Steps a countable item's quantity, e.g. one of three yogurts taken out. Floors at 1: the
+     * last piece leaves through removal instead, so the used-up/thrown-away answer isn't lost.
+     */
+    fun adjustInventoryItemQuantity(id: String, delta: Double): InventoryItem? {
+        synchronized(lock) {
+            val current = _inventory.value
+            val existing = current.firstOrNull { it.id == id } ?: return null
+            val newQuantity = (existing.quantity + delta).coerceAtLeast(1.0)
+            if (newQuantity == existing.quantity) return existing
+
+            val changed = existing.copy(quantity = newQuantity)
+            val updated = current.map { if (it.id == id) changed else it }
+            persistInventory(updated)
+            _inventory.value = updated
+            return changed
+        }
+    }
+
+    /** Fill level is a display-only hint about the remaining amount; expiry is unaffected. */
+    fun setInventoryItemFillLevel(id: String, fillLevel: FillLevel?): InventoryItem? {
+        synchronized(lock) {
+            val current = _inventory.value
+            val existing = current.firstOrNull { it.id == id } ?: return null
+            if (existing.fillLevel == fillLevel?.name) return existing
+
+            val changed = existing.copy(fillLevel = fillLevel?.name)
+            val updated = current.map { if (it.id == id) changed else it }
+            persistInventory(updated)
+            _inventory.value = updated
+            return changed
         }
     }
 
@@ -377,6 +536,24 @@ class GroceriesRepository(context: Context) {
 
     fun addInventoryItem(item: InventoryItem): InventoryItem {
         synchronized(lock) {
+            // The same product bought again the same day stacks onto the existing entry instead
+            // of cluttering the list — three yogurts become one row with quantity 3.
+            val anchorEpochMillis0 = item.purchasedAtEpochMillis ?: item.addedAtEpochMillis
+            val stackTarget = _inventory.value.firstOrNull { existing ->
+                mergeKeyOf(existing.name, existing.unit) == mergeKeyOf(item.name, item.unit) &&
+                    isSameCalendarDay(
+                        existing.purchasedAtEpochMillis ?: existing.addedAtEpochMillis,
+                        anchorEpochMillis0,
+                    )
+            }
+            if (stackTarget != null) {
+                val stacked = stackTarget.copy(quantity = stackTarget.quantity + item.quantity)
+                val updated = _inventory.value.map { if (it.id == stacked.id) stacked else it }
+                persistInventory(updated)
+                _inventory.value = updated
+                return stacked
+            }
+
             val concept = FoodConceptCatalog.byId(item.foodConceptId)
                 ?: FoodConceptCatalog.match(item.name)
             val resolvedCategoryName = item.category ?: concept?.category?.name
@@ -388,7 +565,7 @@ class GroceriesRepository(context: Context) {
                 category = resolvedCategoryName,
                 openedAtEpochMillis = item.openedAtEpochMillis
                     ?: if (category.opensOnPurchase) anchorEpochMillis else null,
-            )
+            ).withSuggestedLocationUnlessUserSet(category, concept?.id)
             val storedItem = if (withConcept.expiresAtEpochMillis != null) {
                 withConcept
             } else {
@@ -404,10 +581,35 @@ class GroceriesRepository(context: Context) {
         }
     }
 
-    fun removeInventoryItem(id: String): Boolean {
+    /**
+     * Removes an item. A non-null [reason] additionally records a consumption event — the data
+     * behind future waste/spending insights. "Just remove" corrections pass null and leave no
+     * trace, so data-entry mistakes don't pollute the log.
+     */
+    fun removeInventoryItem(id: String, reason: ConsumptionReason? = null): Boolean {
         synchronized(lock) {
             val current = _inventory.value
-            if (current.none { it.id == id }) return false
+            val existing = current.firstOrNull { it.id == id } ?: return false
+
+            if (reason != null) {
+                val event = ConsumptionEvent(
+                    itemId = existing.id,
+                    name = existing.name,
+                    category = existing.category,
+                    foodConceptId = existing.foodConceptId,
+                    quantity = existing.quantity,
+                    unit = existing.unit,
+                    priceCents = existing.priceCents,
+                    fillLevel = existing.fillLevel,
+                    reason = reason,
+                    addedAtEpochMillis = existing.addedAtEpochMillis,
+                    expiresAtEpochMillis = existing.expiresAtEpochMillis,
+                    removedAtEpochMillis = System.currentTimeMillis(),
+                )
+                val events = _consumptionEvents.value + event
+                persistConsumptionEvents(events)
+                _consumptionEvents.value = events
+            }
 
             val updated = current.filterNot { it.id == id }
             persistInventory(updated)
@@ -516,39 +718,61 @@ class GroceriesRepository(context: Context) {
 
     fun addReceiptItemsToInventory(
         receiptId: String,
-        itemIds: Collection<String>,
+        selections: List<ReceiptItemSelection>,
     ): List<InventoryItem> {
-        if (itemIds.isEmpty()) return emptyList()
+        if (selections.isEmpty()) return emptyList()
         synchronized(lock) {
             val receipt = _receipts.value.firstOrNull { it.id == receiptId } ?: return emptyList()
-            val requestedIds = itemIds.toSet()
+            val selectionsById = selections.associateBy(ReceiptItemSelection::receiptItemId)
             val existingSourceIds = _inventory.value
                 .asSequence()
                 .filter { it.receiptId == receiptId }
                 .mapNotNull(InventoryItem::receiptItemId)
                 .toSet()
+            // Merged imports keep only their first line's receiptItemId, so already-imported
+            // detection also matches by name+unit — otherwise the extra lines of "3 × Joghurt"
+            // would look unimported forever and re-add on every visit.
+            val existingImportKeys = _inventory.value
+                .asSequence()
+                .filter { it.receiptId == receiptId }
+                .map { mergeKeyOf(it.name, it.unit) }
+                .toSet()
             val addedAt = System.currentTimeMillis()
             val addedItems = receipt.items
-                .asSequence()
-                .filter { it.id in requestedIds && it.id !in existingSourceIds }
-                .map { receiptItem ->
+                .filter {
+                    it.id in selectionsById && it.id !in existingSourceIds &&
+                        mergeKeyOf(it.name, it.unit) !in existingImportKeys
+                }
+                // The same product rung up as several receipt lines becomes one inventory entry
+                // with a summed quantity ("3 × Joghurt" → one row, quantity 3).
+                .groupBy { mergeKeyOf(it.name, it.unit) }
+                .map { (_, lines) ->
+                    val primary = lines.first()
+                    // Prefer a line the user explicitly re-homed, else the suggestion.
+                    val selection = lines
+                        .mapNotNull { selectionsById[it.id] }
+                        .firstOrNull { it.locationSource == LocationSource.USER }
+                        ?: selectionsById.getValue(primary.id)
                     val anchorEpochMillis = receipt.dateEpochMillis ?: addedAt
-                    val category = GroceryCategory.fromStorageValue(receiptItem.category, receiptItem.name)
+                    val category = GroceryCategory.fromStorageValue(primary.category, primary.name)
                     InventoryItem(
-                        name = receiptItem.name,
-                        category = receiptItem.category,
-                        foodConceptId = receiptItem.foodConceptId,
-                        quantity = receiptItem.quantity,
-                        unit = receiptItem.unit,
-                        priceCents = receiptItem.priceCents,
+                        name = primary.name,
+                        category = primary.category,
+                        foodConceptId = primary.foodConceptId,
+                        quantity = lines.sumOf(ReceiptItem::quantity),
+                        unit = primary.unit,
+                        priceCents = primary.priceCents?.let { unitPrice ->
+                            lines.sumOf { it.priceCents ?: unitPrice }
+                        },
+                        storageLocation = selection.storageLocation.name,
+                        locationSource = selection.locationSource.name,
                         purchasedAtEpochMillis = receipt.dateEpochMillis,
                         openedAtEpochMillis = if (category.opensOnPurchase) anchorEpochMillis else null,
                         receiptId = receipt.id,
-                        receiptItemId = receiptItem.id,
+                        receiptItemId = primary.id,
                         addedAtEpochMillis = addedAt,
                     ).withEstimatedExpiry(anchorEpochMillis)
                 }
-                .toList()
 
             if (addedItems.isEmpty()) return emptyList()
             val updated = (_inventory.value + addedItems)
@@ -566,6 +790,20 @@ class GroceriesRepository(context: Context) {
     private fun loadInventory(): List<InventoryItem> =
         loadArray(inventoryIndexFile, INVENTORY_KEY) { it.toInventoryItem() }
             .sortedByDescending(InventoryItem::addedAtEpochMillis)
+
+    private fun loadConsumptionEvents(): List<ConsumptionEvent> {
+        if (!consumptionLogFile.isFile) return emptyList()
+        return runCatching {
+            val array = JSONObject(consumptionLogFile.readText(StandardCharsets.UTF_8))
+                .optJSONArray(CONSUMPTION_EVENTS_KEY)
+                ?: return@runCatching emptyList()
+            buildList {
+                repeat(array.length()) { index ->
+                    array.optJSONObject(index)?.toConsumptionEventOrNull()?.let(::add)
+                }
+            }
+        }.getOrDefault(emptyList())
+    }
 
     private fun <T> loadArray(
         file: File,
@@ -599,6 +837,15 @@ class GroceriesRepository(context: Context) {
         atomicWrite(inventoryIndexFile, root.toString())
     }
 
+    // Whole-file rewrite like every other persist path. At roughly ten removals a day this stays
+    // around a megabyte per year; revisit with an append-only format if the log ever grows hot.
+    private fun persistConsumptionEvents(events: List<ConsumptionEvent>) {
+        val root = JSONObject()
+            .put(SCHEMA_VERSION_KEY, CONSUMPTION_SCHEMA_VERSION)
+            .put(CONSUMPTION_EVENTS_KEY, events.toJsonArray(ConsumptionEvent::toJson))
+        atomicWrite(consumptionLogFile, root.toString())
+    }
+
     private fun receiptDirectory(id: String): File {
         require(RECEIPT_ID_PATTERN.matches(id)) {
             "Receipt IDs may contain only letters, numbers, underscores, and hyphens."
@@ -613,6 +860,10 @@ class GroceriesRepository(context: Context) {
         private const val STORAGE_DIRECTORY = "groceries"
         private const val RECEIPTS_DIRECTORY = "receipts"
         private const val INVENTORY_DIRECTORY = "inventory"
+        private const val CONSUMPTION_DIRECTORY = "consumption"
+        private const val CONSUMPTION_LOG_FILE = "log.json"
+        private const val CONSUMPTION_EVENTS_KEY = "events"
+        private const val CONSUMPTION_SCHEMA_VERSION = 1
         private const val ORIGINAL_DIRECTORY = "original"
         private const val TILES_DIRECTORY = "tiles"
         private const val INDEX_FILE = "index.json"
@@ -621,7 +872,7 @@ class GroceriesRepository(context: Context) {
         private const val SCHEMA_VERSION_KEY = "schemaVersion"
         private const val RECEIPTS_KEY = "receipts"
         private const val INVENTORY_KEY = "inventory"
-        private const val SCHEMA_VERSION = 3
+        private const val SCHEMA_VERSION = 4
         private val RECEIPT_ID_PATTERN = Regex("[A-Za-z0-9_-]{1,128}")
         private val FRAME_FILE_PATTERN = Regex("frame_\\d{4,}\\.jpg")
     }
@@ -629,6 +880,16 @@ class GroceriesRepository(context: Context) {
 
 private val DigitalReceipt.sortEpochMillis: Long
     get() = dateEpochMillis ?: createdAtEpochMillis
+
+/** Two entries describe the same product when name and unit match, ignoring case and padding. */
+private fun mergeKeyOf(name: String, unit: String?): String =
+    name.trim().lowercase(Locale.GERMAN) + "|" + unit?.trim()?.lowercase(Locale.GERMAN).orEmpty()
+
+private fun isSameCalendarDay(firstEpochMillis: Long, secondEpochMillis: Long): Boolean {
+    val zone = java.time.ZoneId.systemDefault()
+    return java.time.Instant.ofEpochMilli(firstEpochMillis).atZone(zone).toLocalDate() ==
+        java.time.Instant.ofEpochMilli(secondEpochMillis).atZone(zone).toLocalDate()
+}
 
 private fun ensureDirectory(directory: File) {
     val path = directory.toPath()
@@ -748,7 +1009,7 @@ private fun ReceiptImageEdit.toJson(): JSONObject = JSONObject()
     .put("cropRight", cropRight.toDouble())
     .put("cropBottom", cropBottom.toDouble())
 
-private fun InventoryItem.toJson(): JSONObject = JSONObject()
+internal fun InventoryItem.toJson(): JSONObject = JSONObject()
     .put("id", id)
     .put("name", name)
     .putNullable("category", category)
@@ -756,6 +1017,10 @@ private fun InventoryItem.toJson(): JSONObject = JSONObject()
     .put("quantity", quantity)
     .putNullable("unit", unit)
     .putNullable("priceCents", priceCents)
+    .putNullable("storageLocation", storageLocation)
+    .putNullable("locationSource", locationSource)
+    .putNullable("locationChangedAtEpochMillis", locationChangedAtEpochMillis)
+    .putNullable("fillLevel", fillLevel)
     .putNullable("purchasedAtEpochMillis", purchasedAtEpochMillis)
     .putNullable("expiresAtEpochMillis", expiresAtEpochMillis)
     .putNullable("expiryRangeEndEpochMillis", expiryRangeEndEpochMillis)
@@ -840,7 +1105,7 @@ private fun JSONObject.toReceiptItem(): ReceiptItem = ReceiptItem(
     needsReview = optBoolean("needsReview", false),
 )
 
-private fun JSONObject.toInventoryItem(): InventoryItem = InventoryItem(
+internal fun JSONObject.toInventoryItem(): InventoryItem = InventoryItem(
     id = getString("id"),
     name = getString("name"),
     category = nullableString("category"),
@@ -848,6 +1113,10 @@ private fun JSONObject.toInventoryItem(): InventoryItem = InventoryItem(
     quantity = optDouble("quantity", 1.0),
     unit = nullableString("unit"),
     priceCents = nullableInt("priceCents"),
+    storageLocation = nullableString("storageLocation"),
+    locationSource = nullableString("locationSource"),
+    locationChangedAtEpochMillis = nullableLong("locationChangedAtEpochMillis"),
+    fillLevel = nullableString("fillLevel"),
     purchasedAtEpochMillis = nullableLong("purchasedAtEpochMillis"),
     expiresAtEpochMillis = nullableLong("expiresAtEpochMillis"),
     expiryRangeEndEpochMillis = nullableLong("expiryRangeEndEpochMillis"),

@@ -210,8 +210,15 @@ fun GroceriesApp(
                     ).rerun(receipt)
                     repository.saveReceipt(updatedReceipt)
                 },
-                onAddItemsToInventory = { ids ->
-                    repository.addReceiptItemsToInventory(receipt.id, ids)
+                onAddItemsToInventory = { selections ->
+                    repository.addReceiptItemsToInventory(receipt.id, selections)
+                },
+                suggestLocation = { item ->
+                    repository.suggestStorageLocation(
+                        foodConceptId = item.foodConceptId,
+                        categoryStorageValue = item.category,
+                        nameHint = item.name,
+                    )
                 },
             )
             return
@@ -376,8 +383,17 @@ private fun TopLevelContent(
             TopLevelDestination.INVENTORY -> InventoryScreen(
                 inventory = inventory,
                 onAddItem = repository::addInventoryItem,
-                onRemoveItem = repository::removeInventoryItem,
+                onRemoveItem = { id, reason -> repository.removeInventoryItem(id, reason) },
                 onMarkOpened = repository::markInventoryItemOpened,
+                onSetLocation = { id, location ->
+                    repository.setInventoryItemStorageLocation(id, location)
+                },
+                onSetFillLevel = { id, level ->
+                    repository.setInventoryItemFillLevel(id, level)
+                },
+                onAdjustQuantity = { id, delta ->
+                    repository.adjustInventoryItemQuantity(id, delta)
+                },
                 modifier = Modifier.fillMaxSize(),
             )
             TopLevelDestination.RECEIPTS -> ReceiptsScreen(

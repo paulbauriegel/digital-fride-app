@@ -40,16 +40,17 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.groceriesapp.data.DigitalReceipt
 import com.example.groceriesapp.data.InventoryItem
+import com.example.groceriesapp.data.taxonomy.StorageLocation
 import com.example.groceriesapp.data.taxonomy.resolveCategory
 import com.example.groceriesapp.data.taxonomy.resolveIconRes
 import com.example.groceriesapp.ui.components.EmptyStateCard
+import com.example.groceriesapp.ui.components.LocationBadge
 import com.example.groceriesapp.ui.components.SectionHeader
+import com.example.groceriesapp.ui.expiresSoon
+import com.example.groceriesapp.ui.expiryUrgency
 import com.example.groceriesapp.ui.formatCurrency
 import com.example.groceriesapp.ui.formatDate
-import com.example.groceriesapp.ui.formatExpiry
 import com.example.groceriesapp.ui.theme.spacing
-import java.time.Instant
-import java.time.temporal.ChronoUnit
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -119,17 +120,20 @@ fun OverviewScreen(
                     item {
                         CategoryRow(inventory)
                     }
-                    val expiring = inventory.filter(::needsAttentionSoon).take(5)
-                    if (expiring.isNotEmpty()) {
+                    val useSoon = inventory
+                        .filter { expiresSoon(it) }
+                        .sortedBy(InventoryItem::expiresAtEpochMillis)
+                        .take(5)
+                    if (useSoon.isNotEmpty()) {
                         item {
                             SectionHeader(
-                                title = "Expiring soon",
+                                title = "Use soon",
                                 actionLabel = "View all",
                                 onAction = onOpenInventory,
                             )
                         }
                         item {
-                            ExpiringRow(expiring)
+                            UseSoonRow(useSoon)
                         }
                     }
                 }
@@ -163,7 +167,7 @@ fun OverviewScreen(
 @Composable
 private fun FridgeSummaryCard(inventory: List<InventoryItem>) {
     val categoryCount = inventory.map { resolveCategory(it.category, it.name) }.distinct().size
-    val expiringCount = inventory.count(::needsAttentionSoon)
+    val expiringCount = inventory.count { expiresSoon(it) }
     Card(
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.primaryContainer,
@@ -281,7 +285,7 @@ private fun CategoryRow(inventory: List<InventoryItem>) {
 }
 
 @Composable
-private fun ExpiringRow(items: List<InventoryItem>) {
+private fun UseSoonRow(items: List<InventoryItem>) {
     LazyRow(horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small)) {
         items(items, key = InventoryItem::id) { item ->
             Card(
@@ -305,7 +309,17 @@ private fun ExpiringRow(items: List<InventoryItem>) {
                         modifier = Modifier.size(28.dp),
                     )
                     Text(item.name, style = MaterialTheme.typography.titleSmall, maxLines = 1)
-                    Text(formatExpiry(item), style = MaterialTheme.typography.bodySmall)
+                    Text(
+                        expiryUrgency(item)?.label ?: "Expiry unknown",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    StorageLocation.fromStorageValue(item.storageLocation)?.let { location ->
+                        LocationBadge(
+                            location = location,
+                            modifier = Modifier.padding(top = MaterialTheme.spacing.extraSmall),
+                        )
+                    }
                 }
             }
         }
@@ -356,12 +370,4 @@ private fun RecentReceiptRow(
             Icon(Icons.Default.ChevronRight, contentDescription = "Open receipt")
         }
     }
-}
-
-private fun needsAttentionSoon(item: InventoryItem): Boolean {
-    val expiry = item.expiresAtEpochMillis ?: return false
-    val now = Instant.now()
-    val then = Instant.ofEpochMilli(expiry)
-    val days = ChronoUnit.DAYS.between(now, then)
-    return days <= 3
 }

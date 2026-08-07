@@ -2,6 +2,7 @@ package com.example.groceriesapp.vision.parsing
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -35,7 +36,10 @@ class ReweReceiptParserTest {
         assertEquals(419L, items[0].lineTotalCents)
         assertEquals("B", items[0].taxFlag)
         assertEquals(1.0, items[0].quantity, 0.001)
-        assertEquals("Stk", items[0].unit)
+        // A bare line carries no quantity breakdown, so the unit is unknown — not assumed "Stk"
+        // (the item could just as well be a 500 g pack).
+        assertNull(items[0].unit)
+        assertNull(items[0].normalizedUnit())
     }
 
     @Test

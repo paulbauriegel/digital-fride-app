@@ -244,6 +244,8 @@ class FoodConceptCatalogTest {
             "bratkrt.Haeh.PFA" to "READY_MEAL",
             "BAMI GORENG" to "READY_MEAL",
             "Nasi Goreng" to "READY_MEAL",
+            "BUTTER CHICKEN" to "READY_MEAL",
+            "KART.VF.BIO" to "POTATO",
             "Phantasia" to "CANDY",
         )
         samples.forEach { (name, expectedId) ->
