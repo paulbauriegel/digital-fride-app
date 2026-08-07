@@ -1,5 +1,6 @@
 package com.example.groceriesapp.vision.editing
 
+import android.graphics.BitmapFactory
 import com.example.groceriesapp.data.DigitalReceipt
 import com.example.groceriesapp.data.ReceiptImageEdit
 import com.example.groceriesapp.data.ReceiptTextRegion
@@ -24,6 +25,35 @@ import org.opencv.imgcodecs.Imgcodecs
 import org.opencv.imgproc.Imgproc
 
 class ReceiptImageEditor {
+    suspend fun projectRegionsForCurrentEdit(
+        receipt: DigitalReceipt,
+        sourceRegions: List<ReceiptTextRegion>,
+    ): List<ReceiptTextRegion> = withContext(Dispatchers.IO) {
+        if (receipt.imageEdit.isIdentity()) return@withContext sourceRegions
+        check(OpenCVLoader.initLocal()) { "OpenCV could not initialize." }
+
+        val sourceTilePaths = receipt.sourceTilePaths.ifEmpty { receipt.tilePaths }
+        require(sourceTilePaths.isNotEmpty()) { "This receipt has no stitched image to OCR." }
+        val (sourceWidth, sourceHeight) = readSourceDimensions(sourceTilePaths)
+        val rotation = expandedRotation(
+            width = sourceWidth,
+            height = sourceHeight,
+            clockwiseDegrees = receipt.imageEdit.rotationDegrees.toDouble(),
+        )
+        try {
+            val crop = receipt.imageEdit.cropRect(rotation.width, rotation.height)
+            transformRegions(
+                regions = sourceRegions,
+                rotation = rotation.matrix,
+                crop = crop,
+                outputWidth = crop.width,
+                outputHeight = crop.height,
+            )
+        } finally {
+            rotation.matrix.release()
+        }
+    }
+
     suspend fun apply(
         receipt: DigitalReceipt,
         edit: ReceiptImageEdit,
@@ -197,6 +227,28 @@ class ReceiptImageEditor {
                 index += 1
             }
         }
+
+    private fun readSourceDimensions(tilePaths: List<String>): Pair<Int, Int> {
+        var expectedWidth: Int? = null
+        var totalHeight = 0L
+        tilePaths.forEachIndexed { index, path ->
+            val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeFile(path, options)
+            require(options.outWidth > 0 && options.outHeight > 0) {
+                "Could not read stitched tile ${index + 1}."
+            }
+            if (expectedWidth == null) {
+                expectedWidth = options.outWidth
+            } else {
+                require(options.outWidth == expectedWidth) {
+                    "Stitched receipt tiles have inconsistent widths."
+                }
+            }
+            totalHeight += options.outHeight
+            require(totalHeight <= Int.MAX_VALUE) { "The stitched receipt is too tall." }
+        }
+        return requireNotNull(expectedWidth) to totalHeight.toInt()
+    }
 
     private fun writePreview(image: Mat, file: File) {
         val dimensions = calculatePreviewDimensions(

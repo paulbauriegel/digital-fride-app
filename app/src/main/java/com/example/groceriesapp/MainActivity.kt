@@ -17,6 +17,9 @@ import androidx.core.content.edit
 import com.example.groceriesapp.data.GroceriesRepository
 import com.example.groceriesapp.ui.GroceriesApp
 import com.example.groceriesapp.ui.theme.GroceriesTheme
+import com.example.groceriesapp.vision.ocr.GlmOcrModelManager
+import com.example.groceriesapp.vision.ocr.GlmOcrLiteRtModelManager
+import com.example.groceriesapp.vision.ocr.OcrEngine
 
 class MainActivity : ComponentActivity() {
     @OptIn(ExperimentalMaterial3WindowSizeClassApi::class)
@@ -30,6 +33,22 @@ class MainActivity : ComponentActivity() {
             var darkTheme by remember {
                 mutableStateOf(preferences.getBoolean("dark_theme", true))
             }
+            var ocrEngine by remember {
+                val storedEngine = OcrEngine.fromPreference(
+                    preferences.getString("ocr_engine", null),
+                )
+                mutableStateOf(
+                    storedEngine.takeUnless { engine ->
+                        when (engine) {
+                            OcrEngine.GLM_OCR ->
+                                !GlmOcrModelManager(applicationContext).state().ready
+                            OcrEngine.GLM_OCR_LITERT ->
+                                !GlmOcrLiteRtModelManager(applicationContext).state().ready
+                            OcrEngine.ML_KIT -> false
+                        }
+                    } ?: OcrEngine.ML_KIT,
+                )
+            }
             SideEffect {
                 WindowCompat.getInsetsController(window, window.decorView).apply {
                     isAppearanceLightStatusBars = !darkTheme
@@ -41,9 +60,14 @@ class MainActivity : ComponentActivity() {
                     repository = repository,
                     widthSizeClass = calculateWindowSizeClass(this).widthSizeClass,
                     darkTheme = darkTheme,
+                    ocrEngine = ocrEngine,
                     onDarkThemeChanged = { enabled ->
                         darkTheme = enabled
                         preferences.edit { putBoolean("dark_theme", enabled) }
+                    },
+                    onOcrEngineChanged = { engine ->
+                        ocrEngine = engine
+                        preferences.edit { putString("ocr_engine", engine.preferenceValue) }
                     },
                 )
             }

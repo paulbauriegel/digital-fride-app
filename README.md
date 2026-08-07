@@ -23,8 +23,9 @@ them to a local fridge inventory.
 - Receipt-mask-only composition with center-weighted hard seams written to `1000 × 2048`
   disk-backed tiles, avoiding a single very large in-memory bitmap.
 - One continuous preview plus a seamless tiled review viewer with zoom and OCR-line highlighting.
-- Bundled ML Kit Latin OCR over 200 px overlapping logical windows; no model download or network
-  permission is required at runtime.
+- Selectable on-device OCR: bundled ML Kit Latin OCR with positioned lines, GLM-OCR through a
+  pinned llama.cpp Android runtime and user-imported GGUF decoder/projector files, or an
+  experimental GLM-OCR LiteRT 2.1.6 path using imported vision and cached-decoder models.
 - Conservative German/European receipt parsing for merchant, date, labeled total, prices,
   quantities, units, and grocery categories.
 - App-private JSON metadata and image storage with atomic index/draft writes; Android cloud backup
@@ -69,6 +70,28 @@ The debug APK is written to:
 ```text
 app/build/outputs/apk/debug/app-debug.apk
 ```
+
+## GLM-OCR setup
+
+ML Kit remains the default and works without setup. To use GLM-OCR, open **More → Text
+recognition**, import both matching files from
+[`ggml-org/GLM-OCR-GGUF`](https://huggingface.co/ggml-org/GLM-OCR-GGUF), then select GLM-OCR:
+
+- `GLM-OCR-Q8_0.gguf`
+- `mmproj-GLM-OCR-Q8_0.gguf`
+
+The files are copied to app-private storage and inference stays offline. The official Q8 pair uses
+about 1.43 GB of device storage. The app packages an arm64 Vulkan runtime built from llama.cpp
+release `b10167`. GLM-OCR first offloads the decoder and multimodal projector to Vulkan, then
+automatically retries on CPU if the device has no compatible Vulkan backend or GPU initialization
+fails. ML Kit remains available on every supported device. GLM-OCR returns plain text without
+positioned line boxes, so receipt highlighting is unavailable for GLM-OCR output.
+
+The experimental LiteRT engine currently executes the vision signatures and cached decoder on CPU.
+An instrumented `litert_gpu` benchmark path uses LiteRT's OpenCL `CompiledModel` backend, but it is
+not selected by the app because Pixel 7 Pro parity runs produced materially different vision
+embeddings even when only one transformer block was delegated. GPU initialization or delegated-op
+counts alone are therefore not treated as successful OCR.
 
 ## Validation boundary
 

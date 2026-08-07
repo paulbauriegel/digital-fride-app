@@ -8,6 +8,14 @@ build/
 **/build/
 captures/
 *.hprof
+__pycache__/
 benchmarks/ocr/results/
+benchmarks/ocr/reference/
 benchmarks/ocr/.venv/
 tools/glm_ocr_litert/output/
+
+# Keep the patched llama.cpp Vulkan source and reproducible build recipe.
+!/build/
+/build/*
+!/build/third_party/
+!/build/third_party/**

@@ -16,6 +16,7 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
     }
 
     buildTypes {
@@ -44,6 +45,7 @@ android {
 
     packaging {
         resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        jniLibs.useLegacyPackaging = true
     }
 }
 
@@ -69,7 +71,10 @@ dependencies {
     implementation("androidx.exifinterface:exifinterface:1.3.6")
 
     implementation("com.google.mlkit:text-recognition:16.0.1")
+    implementation("com.google.ai.edge.litert:litert:2.1.6")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
 
     testImplementation("junit:junit:4.13.2")
+    androidTestImplementation("androidx.test:runner:1.7.0")
+    androidTestImplementation("androidx.test.ext:junit:1.3.0")
 }

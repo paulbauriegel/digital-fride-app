@@ -40,6 +40,7 @@ import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.CropRotate
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.PhotoLibrary
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Warning
@@ -121,6 +122,7 @@ fun ReceiptReviewScreen(
     onDelete: () -> Unit,
     onRescan: () -> Unit,
     onApplyImageEdit: suspend (ReceiptImageEdit) -> Unit,
+    onRerunOcr: suspend () -> Unit,
     onAddItemsToInventory: (Set<String>) -> Unit,
 ) {
     var showDeleteDialog by rememberSaveable { mutableStateOf(false) }
@@ -138,8 +140,34 @@ fun ReceiptReviewScreen(
     var showImageEditor by rememberSaveable { mutableStateOf(false) }
     var applyingImageEdit by rememberSaveable { mutableStateOf(false) }
     var imageEditError by rememberSaveable { mutableStateOf<String?>(null) }
+    var rerunningOcr by rememberSaveable { mutableStateOf(false) }
+    var rerunOcrError by rememberSaveable { mutableStateOf<String?>(null) }
     val coroutineScope = rememberCoroutineScope()
     val selectedRegion = receipt.regions.firstOrNull { it.id == selectedRegionId }
+
+    fun rerunOcr() {
+        if (rerunningOcr || receipt.tilePaths.isEmpty()) return
+        rerunningOcr = true
+        rerunOcrError = null
+        coroutineScope.launch {
+            runCatching { onRerunOcr() }
+                .onSuccess {
+                    imported = false
+                    selectedRegionId = null
+                }
+                .onFailure { error ->
+                    rerunOcrError = error.message ?: "Could not recognize this receipt."
+                }
+            rerunningOcr = false
+        }
+    }
+
+    LaunchedEffect(receipt.items) {
+        selectedItemIds = receipt.items
+            .filterNot(ReceiptItem::needsReview)
+            .map(ReceiptItem::id)
+            .toSet()
+    }
 
     Scaffold(
         topBar = {
@@ -160,6 +188,22 @@ fun ReceiptReviewScreen(
                     }
                 },
                 actions = {
+                    IconButton(
+                        onClick = ::rerunOcr,
+                        enabled = receipt.tilePaths.isNotEmpty() && !rerunningOcr,
+                    ) {
+                        if (rerunningOcr) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp,
+                            )
+                        } else {
+                            Icon(
+                                Icons.Default.Refresh,
+                                contentDescription = "Run OCR again",
+                            )
+                        }
+                    }
                     IconButton(
                         onClick = { showImageEditor = true },
                         enabled = receipt.tilePaths.isNotEmpty(),
@@ -212,6 +256,8 @@ fun ReceiptReviewScreen(
                         imported = true
                     },
                     onRescan = onRescan,
+                    rerunningOcr = rerunningOcr,
+                    onRerunOcr = ::rerunOcr,
                     modifier = Modifier.width(390.dp).fillMaxHeight(),
                 )
             }
@@ -247,6 +293,8 @@ fun ReceiptReviewScreen(
                     imported = true
                 },
                 onRescan = onRescan,
+                rerunningOcr = rerunningOcr,
+                onRerunOcr = ::rerunOcr,
                 modifier = Modifier
                     .fillMaxWidth()
                     .fillMaxHeight(0.86f),
@@ -301,6 +349,20 @@ fun ReceiptReviewScreen(
             dismissButton = {
                 TextButton(onClick = { showDeleteDialog = false }) {
                     Text("Cancel")
+                }
+            },
+        )
+    }
+
+    rerunOcrError?.let { errorMessage ->
+        AlertDialog(
+            onDismissRequest = { rerunOcrError = null },
+            icon = { Icon(Icons.Default.Warning, contentDescription = null) },
+            title = { Text("OCR could not be rerun") },
+            text = { Text(errorMessage) },
+            confirmButton = {
+                TextButton(onClick = { rerunOcrError = null }) {
+                    Text("OK")
                 }
             },
         )
@@ -814,6 +876,8 @@ private fun ReviewPanel(
     imported: Boolean,
     onAdd: () -> Unit,
     onRescan: () -> Unit,
+    rerunningOcr: Boolean,
+    onRerunOcr: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -862,18 +926,12 @@ private fun ReviewPanel(
                     )
                 }
             }
-            Text(
-                receipt.rawText.ifBlank { "No text recognized." },
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.weight(1f),
-                overflow = TextOverflow.Ellipsis,
-            )
-        } else {
-            LazyColumn(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
+        }
+        LazyColumn(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            if (receipt.items.isNotEmpty()) {
                 items(receipt.items, key = ReceiptItem::id) { item ->
                     ReviewItemRow(
                         item = item,
@@ -885,6 +943,22 @@ private fun ReviewPanel(
                             )
                         },
                         onLocate = { onSelectRegion(item.textRegionId) },
+                    )
+                }
+            }
+            item(key = "raw-ocr") {
+                Column(
+                    modifier = Modifier.padding(top = MaterialTheme.spacing.small),
+                    verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.extraSmall),
+                ) {
+                    Text(
+                        "Raw OCR text",
+                        style = MaterialTheme.typography.titleSmall,
+                    )
+                    Text(
+                        receipt.rawText.ifBlank { "No text recognized." },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
@@ -901,6 +975,22 @@ private fun ReviewPanel(
         }
         TextButton(onClick = onRescan, modifier = Modifier.fillMaxWidth()) {
             Text("Rescan receipt")
+        }
+        OutlinedButton(
+            onClick = onRerunOcr,
+            enabled = receipt.tilePaths.isNotEmpty() && !rerunningOcr,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            if (rerunningOcr) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(18.dp),
+                    strokeWidth = 2.dp,
+                )
+            } else {
+                Icon(Icons.Default.Refresh, contentDescription = null)
+            }
+            Spacer(Modifier.width(8.dp))
+            Text(if (rerunningOcr) "Running OCR…" else "Run OCR again")
         }
         Text(
             "Expiry dates remain unknown until you set them.",

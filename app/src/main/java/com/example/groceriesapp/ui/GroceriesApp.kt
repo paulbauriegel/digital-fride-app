@@ -54,6 +54,9 @@ import com.example.groceriesapp.feature.scanner.ScanViewModel
 import com.example.groceriesapp.feature.scanner.ScanViewModelFactory
 import com.example.groceriesapp.feature.scanner.ScannerScreen
 import com.example.groceriesapp.vision.editing.ReceiptImageEditor
+import com.example.groceriesapp.vision.ocr.OcrEngine
+import com.example.groceriesapp.vision.ocr.ReceiptOcrRerunner
+import com.example.groceriesapp.vision.ocr.receiptOcrRecognizer
 import java.io.File
 import java.util.UUID
 
@@ -72,7 +75,9 @@ fun GroceriesApp(
     repository: GroceriesRepository,
     widthSizeClass: WindowWidthSizeClass,
     darkTheme: Boolean,
+    ocrEngine: OcrEngine,
     onDarkThemeChanged: (Boolean) -> Unit,
+    onOcrEngineChanged: (OcrEngine) -> Unit,
 ) {
     val receipts by repository.receipts.collectAsStateWithLifecycle()
     val inventory by repository.inventory.collectAsStateWithLifecycle()
@@ -83,6 +88,9 @@ fun GroceriesApp(
     var reviewReceiptId by rememberSaveable { mutableStateOf<String?>(null) }
     val context = LocalContext.current
     val expanded = widthSizeClass != WindowWidthSizeClass.Compact
+    val ocrRecognizer = remember(context, ocrEngine) {
+        receiptOcrRecognizer(context, ocrEngine)
+    }
 
     fun beginScan() {
         reviewReceiptId = null
@@ -98,7 +106,7 @@ fun GroceriesApp(
         val scanViewModel: ScanViewModel = viewModel(
             viewModelStoreOwner = scanOwner,
             key = "receipt-scan-$activeScanKey",
-            factory = ScanViewModelFactory(repository, activeScanKey),
+            factory = ScanViewModelFactory(repository, activeScanKey, ocrRecognizer),
         )
         val scanState by scanViewModel.uiState.collectAsStateWithLifecycle()
         ScannerScreen(
@@ -129,6 +137,12 @@ fun GroceriesApp(
                 onRescan = ::beginScan,
                 onApplyImageEdit = { edit ->
                     val updatedReceipt = ReceiptImageEditor().apply(receipt, edit)
+                    repository.saveReceipt(updatedReceipt)
+                },
+                onRerunOcr = {
+                    val updatedReceipt = ReceiptOcrRerunner(
+                        recognizer = ocrRecognizer,
+                    ).rerun(receipt)
                     repository.saveReceipt(updatedReceipt)
                 },
                 onAddItemsToInventory = { ids ->
@@ -176,7 +190,9 @@ fun GroceriesApp(
                     receipts = receipts,
                     inventory = inventory,
                     darkTheme = darkTheme,
+                    ocrEngine = ocrEngine,
                     onDarkThemeChanged = onDarkThemeChanged,
+                    onOcrEngineChanged = onOcrEngineChanged,
                     onScan = ::beginScan,
                     onDestination = { destination = it },
                     onOpenReceipt = { reviewReceiptId = it },
@@ -215,7 +231,9 @@ fun GroceriesApp(
                 receipts = receipts,
                 inventory = inventory,
                 darkTheme = darkTheme,
+                ocrEngine = ocrEngine,
                 onDarkThemeChanged = onDarkThemeChanged,
+                onOcrEngineChanged = onOcrEngineChanged,
                 onScan = ::beginScan,
                 onDestination = { destination = it },
                 onOpenReceipt = { reviewReceiptId = it },
@@ -242,7 +260,9 @@ private fun TopLevelContent(
     receipts: List<com.example.groceriesapp.data.DigitalReceipt>,
     inventory: List<com.example.groceriesapp.data.InventoryItem>,
     darkTheme: Boolean,
+    ocrEngine: OcrEngine,
     onDarkThemeChanged: (Boolean) -> Unit,
+    onOcrEngineChanged: (OcrEngine) -> Unit,
     onScan: () -> Unit,
     onDestination: (TopLevelDestination) -> Unit,
     onOpenReceipt: (String) -> Unit,
@@ -274,6 +294,8 @@ private fun TopLevelContent(
             TopLevelDestination.MORE -> MoreScreen(
                 darkTheme = darkTheme,
                 onDarkThemeChanged = onDarkThemeChanged,
+                ocrEngine = ocrEngine,
+                onOcrEngineChanged = onOcrEngineChanged,
                 receiptCount = receipts.size,
                 inventoryCount = inventory.size,
                 modifier = Modifier.fillMaxSize(),

@@ -9,6 +9,7 @@ import com.example.groceriesapp.vision.ProcessingStage
 import com.example.groceriesapp.vision.ReceiptProcessingPipeline
 import com.example.groceriesapp.vision.capture.LiveCaptureGuidance
 import com.example.groceriesapp.vision.capture.ReceiptCaptureObservation
+import com.example.groceriesapp.vision.ocr.ReceiptOcrRecognizer
 import com.example.groceriesapp.vision.overallProgress
 import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
@@ -59,10 +60,14 @@ data class ScanUiState(
 class ScanViewModel(
     private val repository: GroceriesRepository,
     sessionId: String,
+    ocrRecognizer: ReceiptOcrRecognizer,
 ) : ViewModel() {
     private val draft = repository.openOrCreateScanSession(sessionId)
     private val session: ScanSession = draft.session
-    private val processingPipeline = ReceiptProcessingPipeline(repository)
+    private val processingPipeline = ReceiptProcessingPipeline(
+        repository = repository,
+        ocrRecognizer = ocrRecognizer,
+    )
     private val terminated = AtomicBoolean(false)
     private val _uiState = MutableStateFlow(
         ScanUiState(acceptedFramePaths = draft.acceptedFramePaths),
@@ -268,10 +273,11 @@ class ScanViewModel(
 class ScanViewModelFactory(
     private val repository: GroceriesRepository,
     private val sessionId: String,
+    private val ocrRecognizer: ReceiptOcrRecognizer,
 ) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         require(modelClass.isAssignableFrom(ScanViewModel::class.java))
-        return ScanViewModel(repository, sessionId) as T
+        return ScanViewModel(repository, sessionId, ocrRecognizer) as T
     }
 }

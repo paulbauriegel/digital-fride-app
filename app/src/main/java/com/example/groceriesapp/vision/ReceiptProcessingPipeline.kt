@@ -6,7 +6,9 @@ import com.example.groceriesapp.data.ReceiptItem
 import com.example.groceriesapp.data.ReceiptStatus
 import com.example.groceriesapp.data.ReceiptTextRegion
 import com.example.groceriesapp.data.ScanSession
-import com.example.groceriesapp.vision.ocr.ReceiptOcrEngine
+import com.example.groceriesapp.vision.ocr.MlKitReceiptOcrRecognizer
+import com.example.groceriesapp.vision.ocr.ReceiptOcrInput
+import com.example.groceriesapp.vision.ocr.ReceiptOcrRecognizer
 import com.example.groceriesapp.vision.parsing.ParsedLineItem
 import com.example.groceriesapp.vision.parsing.ReceiptParser
 import com.example.groceriesapp.vision.stitching.PlanarReceiptStitcher
@@ -19,6 +21,7 @@ class ReceiptProcessingPipeline(
     private val repository: GroceriesRepository,
     private val stitcher: PlanarReceiptStitcher = PlanarReceiptStitcher(),
     private val parser: ReceiptParser = ReceiptParser(),
+    private val ocrRecognizer: ReceiptOcrRecognizer = MlKitReceiptOcrRecognizer(),
 ) {
     suspend fun process(
         session: ScanSession,
@@ -35,9 +38,12 @@ class ReceiptProcessingPipeline(
         )
 
         onProgress(ProcessingStage.RECOGNIZING_TEXT, 0f)
-        val ocr = ReceiptOcrEngine().use { engine ->
-            engine.recognizeTiles(artifact.tilePaths)
-        }
+        val ocr = ocrRecognizer.recognize(
+            ReceiptOcrInput(
+                tilePaths = artifact.tilePaths,
+                previewPath = artifact.previewPath,
+            ),
+        )
         onProgress(ProcessingStage.RECOGNIZING_TEXT, 1f)
 
         onProgress(ProcessingStage.PARSING_ITEMS, 0.25f)
