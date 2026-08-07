@@ -1,6 +1,10 @@
 package com.example.groceriesapp.data
 
 import android.content.Context
+import com.example.groceriesapp.data.taxonomy.ExpiryEstimator
+import com.example.groceriesapp.data.taxonomy.FoodConceptCatalog
+import com.example.groceriesapp.data.taxonomy.GroceryCategory
+import com.example.groceriesapp.data.taxonomy.ShelfLifeCatalog
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
@@ -36,11 +40,116 @@ class GroceriesRepository(context: Context) {
     private val inventoryIndexFile = File(inventoryRoot, INDEX_FILE)
     private val activeScanFile = File(receiptsRoot, ACTIVE_SCAN_FILE)
 
+    private val expiryEstimator = ExpiryEstimator(ShelfLifeCatalog.fromAssets(context))
+
     private val _receipts = MutableStateFlow(loadReceipts())
     val receipts: StateFlow<List<DigitalReceipt>> = _receipts.asStateFlow()
 
     private val _inventory = MutableStateFlow(loadInventory())
     val inventory: StateFlow<List<InventoryItem>> = _inventory.asStateFlow()
+
+    init {
+        normalizeStoredDataIfNeeded()
+    }
+
+    /**
+     * Rewrites items still holding legacy category strings, and backfills concepts and expiry
+     * estimates for items saved before the taxonomy existed. Runs once, on the first load after
+     * the update, then leaves the files alone.
+     */
+    private fun normalizeStoredDataIfNeeded() {
+        synchronized(lock) {
+            val receipts = _receipts.value
+            val normalizedReceipts = receipts.map { receipt ->
+                receipt.copy(items = receipt.items.map(::normalizeReceiptItem))
+            }
+            if (normalizedReceipts != receipts) {
+                persistReceipts(normalizedReceipts)
+                _receipts.value = normalizedReceipts
+            }
+
+            val inventory = _inventory.value
+            val normalizedInventory = inventory.map(::normalizeInventoryItem)
+            if (normalizedInventory != inventory) {
+                persistInventory(normalizedInventory)
+                _inventory.value = normalizedInventory
+            }
+        }
+    }
+
+    /**
+     * Re-matching by name first (rather than trusting a previously-stored [FoodConcept] id) lets
+     * catalog corrections retroactively fix already-persisted items — e.g. a keyword fix that
+     * moves "Traubensaft" from GRAPES to JUICE reclassifies existing inventory on next launch,
+     * not just newly-scanned items. [FoodConceptCatalog.byId] is only a fallback for names that no
+     * longer match anything (so a still-valid past classification isn't dropped to OTHER).
+     */
+    private fun normalizeReceiptItem(item: ReceiptItem): ReceiptItem {
+        val concept = FoodConceptCatalog.match(item.name) ?: FoodConceptCatalog.byId(item.foodConceptId)
+        val category = concept?.category
+            ?: GroceryCategory.fromStorageValue(item.category, item.name)
+        return item.copy(category = category.name, foodConceptId = concept?.id)
+    }
+
+    private fun normalizeInventoryItem(item: InventoryItem): InventoryItem {
+        val concept = FoodConceptCatalog.match(item.name) ?: FoodConceptCatalog.byId(item.foodConceptId)
+        val category = concept?.category
+            ?: GroceryCategory.fromStorageValue(item.category, item.name)
+        val normalized = item.copy(category = category.name, foodConceptId = concept?.id)
+        // Always recompute rather than only filling in a missing/stale-classification estimate:
+        // nothing here is ever user-authored (there's no UI to hand-set an expiry date yet), so a
+        // fresh estimate can never clobber something the user typed. This also self-heals items
+        // whose stored estimate predates a shelf-life data fix, not just a classification fix —
+        // e.g. a concept gaining a proper rule where it used to fall back to its category. Once
+        // printed-date OCR lands, this stays safe: ExpiryEstimator checks printedDateEpochMillis
+        // first regardless, so a real printed date still wins over the algorithmic guess.
+        return normalized.withEstimatedExpiry(
+            purchasedAtEpochMillis = normalized.purchasedAtEpochMillis
+                ?: normalized.addedAtEpochMillis,
+        )
+    }
+
+    private fun InventoryItem.withEstimatedExpiry(
+        purchasedAtEpochMillis: Long?,
+    ): InventoryItem {
+        val estimate = expiryEstimator.estimate(
+            foodConceptId = foodConceptId,
+            categoryStorageValue = category,
+            nameHint = name,
+            purchasedAtEpochMillis = purchasedAtEpochMillis,
+            openedAtEpochMillis = openedAtEpochMillis,
+            printedDateEpochMillis = printedDateEpochMillis,
+        ) ?: return this
+        return copy(
+            expiresAtEpochMillis = estimate.expiresAtEpochMillis,
+            expiryRangeEndEpochMillis = estimate.rangeEndEpochMillis,
+            expiryEstimateSource = estimate.source.name,
+        )
+    }
+
+    /**
+     * Records that an item has been opened and re-estimates its window, since opened storage life
+     * is typically much shorter than unopened.
+     */
+    fun markInventoryItemOpened(id: String): InventoryItem? {
+        synchronized(lock) {
+            val current = _inventory.value
+            val existing = current.firstOrNull { it.id == id } ?: return null
+            if (existing.openedAtEpochMillis != null) return existing
+
+            val opened = existing.copy(openedAtEpochMillis = System.currentTimeMillis())
+            val reestimated = opened
+                .copy(expiresAtEpochMillis = null, expiryRangeEndEpochMillis = null)
+                .withEstimatedExpiry(opened.purchasedAtEpochMillis ?: opened.addedAtEpochMillis)
+                // Keep the original date if nothing better could be derived.
+                .let { if (it.expiresAtEpochMillis == null) opened else it }
+
+            val updated = current.map { if (it.id == id) reestimated else it }
+            persistInventory(updated)
+            _inventory.value = updated
+            return reestimated
+        }
+    }
 
     fun createScanSession(id: String = UUID.randomUUID().toString()): ScanDraft {
         synchronized(lock) {
@@ -268,7 +377,23 @@ class GroceriesRepository(context: Context) {
 
     fun addInventoryItem(item: InventoryItem): InventoryItem {
         synchronized(lock) {
-            val storedItem = item.copy()
+            val concept = FoodConceptCatalog.byId(item.foodConceptId)
+                ?: FoodConceptCatalog.match(item.name)
+            val resolvedCategoryName = item.category ?: concept?.category?.name
+            val category = concept?.category
+                ?: GroceryCategory.fromStorageValue(resolvedCategoryName, item.name)
+            val anchorEpochMillis = item.purchasedAtEpochMillis ?: item.addedAtEpochMillis
+            val withConcept = item.copy(
+                foodConceptId = concept?.id ?: item.foodConceptId,
+                category = resolvedCategoryName,
+                openedAtEpochMillis = item.openedAtEpochMillis
+                    ?: if (category.opensOnPurchase) anchorEpochMillis else null,
+            )
+            val storedItem = if (withConcept.expiresAtEpochMillis != null) {
+                withConcept
+            } else {
+                withConcept.withEstimatedExpiry(anchorEpochMillis)
+            }
             val updated = _inventory.value
                 .filterNot { it.id == storedItem.id }
                 .plus(storedItem)
@@ -331,6 +456,11 @@ class GroceriesRepository(context: Context) {
         return receipt
     }
 
+    /** REWE stamps receipts in UTC ("2025-12-17T16:35:28Z"). */
+    private fun parseInstantToEpochMillis(timestamp: String): Long? =
+        runCatching { java.time.Instant.parse(timestamp).toEpochMilli() }
+            .getOrElse { parseIsoDateToEpochMillis(timestamp) }
+
     private fun parseIsoDateToEpochMillis(dateIso: String): Long? {
         return runCatching {
             val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US)
@@ -339,6 +469,39 @@ class GroceriesRepository(context: Context) {
             val sdf2 = SimpleDateFormat("yyyy-MM-dd", Locale.US)
             sdf2.parse(dateIso)?.time
         }.getOrNull())
+    }
+
+    fun importReweReceipt(
+        merchant: String?,
+        dateIso: String,
+        totalCents: Int?,
+        items: List<ReceiptItem>,
+        reweReceiptId: String,
+    ): DigitalReceipt {
+        val receipt = DigitalReceipt(
+            merchant = merchant?.takeIf(String::isNotBlank) ?: "REWE",
+            dateEpochMillis = parseInstantToEpochMillis(dateIso),
+            totalCents = totalCents,
+            currency = "EUR",
+            items = items,
+            status = ReceiptStatus.READY,
+            createdAtEpochMillis = System.currentTimeMillis(),
+            source = ReceiptSource.REWE,
+            reweReceiptId = reweReceiptId,
+        )
+        synchronized(lock) {
+            _receipts.value.firstOrNull { it.reweReceiptId == reweReceiptId }?.let { return it }
+            val updated = _receipts.value
+                .plus(receipt)
+                .sortedByDescending(DigitalReceipt::sortEpochMillis)
+            persistReceipts(updated)
+            _receipts.value = updated
+        }
+        return receipt
+    }
+
+    fun hasReweReceipt(reweReceiptId: String): Boolean = synchronized(lock) {
+        _receipts.value.any { it.reweReceiptId == reweReceiptId }
     }
 
     fun hasBioCompanyReceipt(receiptNumber: Int?, checkout: Int?): Boolean {
@@ -369,17 +532,21 @@ class GroceriesRepository(context: Context) {
                 .asSequence()
                 .filter { it.id in requestedIds && it.id !in existingSourceIds }
                 .map { receiptItem ->
+                    val anchorEpochMillis = receipt.dateEpochMillis ?: addedAt
+                    val category = GroceryCategory.fromStorageValue(receiptItem.category, receiptItem.name)
                     InventoryItem(
                         name = receiptItem.name,
                         category = receiptItem.category,
+                        foodConceptId = receiptItem.foodConceptId,
                         quantity = receiptItem.quantity,
                         unit = receiptItem.unit,
                         priceCents = receiptItem.priceCents,
                         purchasedAtEpochMillis = receipt.dateEpochMillis,
+                        openedAtEpochMillis = if (category.opensOnPurchase) anchorEpochMillis else null,
                         receiptId = receipt.id,
                         receiptItemId = receiptItem.id,
                         addedAtEpochMillis = addedAt,
-                    )
+                    ).withEstimatedExpiry(anchorEpochMillis)
                 }
                 .toList()
 
@@ -454,7 +621,7 @@ class GroceriesRepository(context: Context) {
         private const val SCHEMA_VERSION_KEY = "schemaVersion"
         private const val RECEIPTS_KEY = "receipts"
         private const val INVENTORY_KEY = "inventory"
-        private const val SCHEMA_VERSION = 2
+        private const val SCHEMA_VERSION = 3
         private val RECEIPT_ID_PATTERN = Regex("[A-Za-z0-9_-]{1,128}")
         private val FRAME_FILE_PATTERN = Regex("frame_\\d{4,}\\.jpg")
     }
@@ -551,6 +718,7 @@ private fun DigitalReceipt.toJson(): JSONObject = JSONObject()
     .put("source", source.name)
     .putNullable("bioCompanyReceiptNumber", bioCompanyReceiptNumber)
     .putNullable("bioCompanyCheckout", bioCompanyCheckout)
+    .putNullable("reweReceiptId", reweReceiptId)
 
 private fun ReceiptTextRegion.toJson(): JSONObject = JSONObject()
     .put("id", id)
@@ -569,6 +737,7 @@ private fun ReceiptItem.toJson(): JSONObject = JSONObject()
     .putNullable("unit", unit)
     .putNullable("priceCents", priceCents)
     .putNullable("category", category)
+    .putNullable("foodConceptId", foodConceptId)
     .putNullable("textRegionId", textRegionId)
     .put("needsReview", needsReview)
 
@@ -583,17 +752,23 @@ private fun InventoryItem.toJson(): JSONObject = JSONObject()
     .put("id", id)
     .put("name", name)
     .putNullable("category", category)
+    .putNullable("foodConceptId", foodConceptId)
     .put("quantity", quantity)
     .putNullable("unit", unit)
     .putNullable("priceCents", priceCents)
     .putNullable("purchasedAtEpochMillis", purchasedAtEpochMillis)
     .putNullable("expiresAtEpochMillis", expiresAtEpochMillis)
+    .putNullable("expiryRangeEndEpochMillis", expiryRangeEndEpochMillis)
+    .putNullable("expiryEstimateSource", expiryEstimateSource)
+    .putNullable("openedAtEpochMillis", openedAtEpochMillis)
+    .putNullable("printedDateEpochMillis", printedDateEpochMillis)
+    .putNullable("printedDateType", printedDateType)
     .putNullable("receiptId", receiptId)
     .putNullable("receiptItemId", receiptItemId)
     .put("addedAtEpochMillis", addedAtEpochMillis)
 
 private fun JSONObject.toDigitalReceipt(): DigitalReceipt = DigitalReceipt(
-    id = getString("id"),
+    id = optString("id", ""),
     merchant = nullableString("merchant"),
     dateEpochMillis = nullableLong("dateEpochMillis"),
     totalCents = nullableInt("totalCents"),
@@ -614,6 +789,7 @@ private fun JSONObject.toDigitalReceipt(): DigitalReceipt = DigitalReceipt(
     source = enumValueOrDefault(optString("source", "CAPTURED"), ReceiptSource.CAPTURED),
     bioCompanyReceiptNumber = nullableInt("bioCompanyReceiptNumber"),
     bioCompanyCheckout = nullableInt("bioCompanyCheckout"),
+    reweReceiptId = nullableString("reweReceiptId"),
 )
 
 private fun JSONObject.toReceiptImageEdit(): ReceiptImageEdit {
@@ -659,6 +835,7 @@ private fun JSONObject.toReceiptItem(): ReceiptItem = ReceiptItem(
     unit = nullableString("unit"),
     priceCents = nullableInt("priceCents"),
     category = nullableString("category"),
+    foodConceptId = nullableString("foodConceptId"),
     textRegionId = nullableString("textRegionId"),
     needsReview = optBoolean("needsReview", false),
 )
@@ -667,11 +844,17 @@ private fun JSONObject.toInventoryItem(): InventoryItem = InventoryItem(
     id = getString("id"),
     name = getString("name"),
     category = nullableString("category"),
+    foodConceptId = nullableString("foodConceptId"),
     quantity = optDouble("quantity", 1.0),
     unit = nullableString("unit"),
     priceCents = nullableInt("priceCents"),
     purchasedAtEpochMillis = nullableLong("purchasedAtEpochMillis"),
     expiresAtEpochMillis = nullableLong("expiresAtEpochMillis"),
+    expiryRangeEndEpochMillis = nullableLong("expiryRangeEndEpochMillis"),
+    expiryEstimateSource = nullableString("expiryEstimateSource"),
+    openedAtEpochMillis = nullableLong("openedAtEpochMillis"),
+    printedDateEpochMillis = nullableLong("printedDateEpochMillis"),
+    printedDateType = nullableString("printedDateType"),
     receiptId = nullableString("receiptId"),
     receiptItemId = nullableString("receiptItemId"),
     addedAtEpochMillis = optLong("addedAtEpochMillis", 0L),

@@ -1,5 +1,6 @@
 package com.example.groceriesapp.feature.overview
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -7,6 +8,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -33,14 +35,18 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.groceriesapp.data.DigitalReceipt
 import com.example.groceriesapp.data.InventoryItem
+import com.example.groceriesapp.data.taxonomy.resolveCategory
+import com.example.groceriesapp.data.taxonomy.resolveIconRes
 import com.example.groceriesapp.ui.components.EmptyStateCard
 import com.example.groceriesapp.ui.components.SectionHeader
 import com.example.groceriesapp.ui.formatCurrency
 import com.example.groceriesapp.ui.formatDate
+import com.example.groceriesapp.ui.formatExpiry
 import com.example.groceriesapp.ui.theme.spacing
 import java.time.Instant
 import java.time.temporal.ChronoUnit
@@ -113,7 +119,7 @@ fun OverviewScreen(
                     item {
                         CategoryRow(inventory)
                     }
-                    val expiring = inventory.filter(::expiresWithinThreeDays).take(5)
+                    val expiring = inventory.filter(::needsAttentionSoon).take(5)
                     if (expiring.isNotEmpty()) {
                         item {
                             SectionHeader(
@@ -156,8 +162,8 @@ fun OverviewScreen(
 
 @Composable
 private fun FridgeSummaryCard(inventory: List<InventoryItem>) {
-    val categoryCount = inventory.mapNotNull(InventoryItem::category).distinct().size
-    val expiringCount = inventory.count(::expiresWithinThreeDays)
+    val categoryCount = inventory.map { resolveCategory(it.category, it.name) }.distinct().size
+    val expiringCount = inventory.count(::needsAttentionSoon)
     Card(
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.primaryContainer,
@@ -238,11 +244,11 @@ private fun StepRow(number: String, title: String, body: String) {
 
 @Composable
 private fun CategoryRow(inventory: List<InventoryItem>) {
-    val categories = inventory.groupBy { it.category ?: "Other" }
+    val categories = inventory.groupBy { resolveCategory(it.category, it.name) }
         .entries
         .sortedByDescending { it.value.size }
     LazyRow(horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small)) {
-        items(categories, key = { it.key }) { entry ->
+        items(categories, key = { it.key.name }) { entry ->
             Card(
                 modifier = Modifier
                     .width(136.dp)
@@ -255,9 +261,13 @@ private fun CategoryRow(inventory: List<InventoryItem>) {
                     modifier = Modifier.padding(MaterialTheme.spacing.medium),
                     verticalArrangement = Arrangement.SpaceBetween,
                 ) {
-                    Text(categoryEmoji(entry.key), style = MaterialTheme.typography.headlineSmall)
+                    Image(
+                        painter = painterResource(entry.key.iconRes),
+                        contentDescription = null,
+                        modifier = Modifier.size(32.dp),
+                    )
                     Column {
-                        Text(entry.key, style = MaterialTheme.typography.titleSmall)
+                        Text(entry.key.displayName, style = MaterialTheme.typography.titleSmall)
                         Text(
                             "${entry.value.size} ${if (entry.value.size == 1) "item" else "items"}",
                             style = MaterialTheme.typography.bodySmall,
@@ -287,9 +297,15 @@ private fun ExpiringRow(items: List<InventoryItem>) {
                     modifier = Modifier.padding(MaterialTheme.spacing.medium),
                     verticalArrangement = Arrangement.SpaceBetween,
                 ) {
-                    Text(categoryEmoji(item.category), style = MaterialTheme.typography.titleLarge)
+                    Image(
+                        painter = painterResource(
+                            resolveIconRes(item.foodConceptId, item.category, item.name),
+                        ),
+                        contentDescription = null,
+                        modifier = Modifier.size(28.dp),
+                    )
                     Text(item.name, style = MaterialTheme.typography.titleSmall, maxLines = 1)
-                    Text(formatDate(item.expiresAtEpochMillis), style = MaterialTheme.typography.bodySmall)
+                    Text(formatExpiry(item), style = MaterialTheme.typography.bodySmall)
                 }
             }
         }
@@ -342,21 +358,10 @@ private fun RecentReceiptRow(
     }
 }
 
-private fun expiresWithinThreeDays(item: InventoryItem): Boolean {
+private fun needsAttentionSoon(item: InventoryItem): Boolean {
     val expiry = item.expiresAtEpochMillis ?: return false
     val now = Instant.now()
     val then = Instant.ofEpochMilli(expiry)
     val days = ChronoUnit.DAYS.between(now, then)
-    return days in 0..3
-}
-
-private fun categoryEmoji(category: String?): String = when (category) {
-    "Fruit" -> "🍎"
-    "Vegetables" -> "🥦"
-    "Dairy" -> "🥛"
-    "Meat & Fish" -> "🐟"
-    "Bakery" -> "🥖"
-    "Pantry" -> "🥫"
-    "Drinks" -> "🧃"
-    else -> "🛒"
+    return days <= 3
 }

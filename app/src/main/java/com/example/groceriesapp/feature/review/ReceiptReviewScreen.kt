@@ -6,6 +6,7 @@ import android.graphics.Matrix
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -48,6 +49,7 @@ import androidx.compose.material.icons.filled.ZoomIn
 import androidx.compose.material.icons.filled.ZoomOut
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
@@ -94,6 +96,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -101,7 +104,11 @@ import com.example.groceriesapp.data.DigitalReceipt
 import com.example.groceriesapp.data.ReceiptImageEdit
 import com.example.groceriesapp.data.ReceiptItem
 import com.example.groceriesapp.data.ReceiptTextRegion
+import com.example.groceriesapp.data.taxonomy.resolveCategory
+import com.example.groceriesapp.ui.components.InitialsBadge
+import com.example.groceriesapp.ui.components.MerchantBadge
 import com.example.groceriesapp.ui.formatCurrency
+import com.example.groceriesapp.ui.formatReceiptTimestamp
 import com.example.groceriesapp.ui.formatDate
 import com.example.groceriesapp.ui.theme.spacing
 import kotlin.math.hypot
@@ -131,6 +138,7 @@ fun ReceiptReviewScreen(
         mutableStateOf(
             receipt.items
                 .filterNot(ReceiptItem::needsReview)
+                .filterNot(ReceiptItem::isDepositLine)
                 .map(ReceiptItem::id)
                 .toSet(),
         )
@@ -165,6 +173,7 @@ fun ReceiptReviewScreen(
     LaunchedEffect(receipt.items) {
         selectedItemIds = receipt.items
             .filterNot(ReceiptItem::needsReview)
+            .filterNot(ReceiptItem::isDepositLine)
             .map(ReceiptItem::id)
             .toSet()
     }
@@ -173,13 +182,15 @@ fun ReceiptReviewScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Column {
-                        Text(receipt.merchant ?: "Digital receipt")
-                        Text(
-                            formatDate(receipt.dateEpochMillis),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                    if (expanded) {
+                        Column {
+                            Text(receipt.merchant ?: "Digital receipt")
+                            Text(
+                                formatDate(receipt.dateEpochMillis),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
                 },
                 navigationIcon = {
@@ -213,8 +224,10 @@ fun ReceiptReviewScreen(
                     IconButton(onClick = onShare) {
                         Icon(Icons.Default.Share, contentDescription = "Share receipt image")
                     }
-                    IconButton(onClick = { showDeleteDialog = true }) {
-                        Icon(Icons.Default.DeleteOutline, contentDescription = "Delete receipt")
+                    if (expanded) {
+                        IconButton(onClick = { showDeleteDialog = true }) {
+                            Icon(Icons.Default.DeleteOutline, contentDescription = "Delete receipt")
+                        }
                     }
                 },
             )
@@ -223,13 +236,9 @@ fun ReceiptReviewScreen(
             if (!expanded) {
                 CompactReviewActions(
                     itemCount = receipt.items.size,
-                    selectedCount = selectedItemIds.size,
-                    imported = imported,
+                    onRescan = onRescan,
                     onReview = { showItemsSheet = true },
-                    onAdd = {
-                        onAddItemsToInventory(selectedItemIds)
-                        imported = true
-                    },
+                    onDelete = { showDeleteDialog = true },
                 )
             }
         },
@@ -266,12 +275,31 @@ fun ReceiptReviewScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(innerPadding),
+                verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.medium),
             ) {
-                ReceiptSummary(receipt)
-                ReceiptViewer(
+                ReceiptHeader(
+                    receipt = receipt,
+                    modifier = Modifier.padding(
+                        start = MaterialTheme.spacing.medium,
+                        end = MaterialTheme.spacing.medium,
+                    ),
+                )
+                FridgeItemsCard(
+                    receipt = receipt,
+                    imported = imported,
+                    onClick = { showItemsSheet = true },
+                    modifier = Modifier.padding(horizontal = MaterialTheme.spacing.medium),
+                )
+                val hasReceiptImage =
+                    receipt.tilePaths.isNotEmpty() || receipt.originalFramePaths.isNotEmpty()
+                ReceiptImageCard(
                     receipt = receipt,
                     selectedRegion = selectedRegion,
-                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                    fillAvailable = hasReceiptImage,
+                    modifier = Modifier
+                        .then(if (hasReceiptImage) Modifier.weight(1f) else Modifier)
+                        .fillMaxWidth()
+                        .padding(horizontal = MaterialTheme.spacing.medium),
                 )
             }
         }
@@ -782,56 +810,201 @@ private fun fittedImageRect(containerSize: IntSize, imageAspect: Float): Rect {
 private const val MIN_CROP_FRACTION = 0.05f
 
 @Composable
-private fun ReceiptSummary(receipt: DigitalReceipt) {
+private fun ReceiptHeader(
+    receipt: DigitalReceipt,
+    modifier: Modifier = Modifier,
+) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surfaceContainer)
-            .padding(MaterialTheme.spacing.medium),
-        horizontalArrangement = Arrangement.SpaceBetween,
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.medium),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column {
+        MerchantBadge(receipt.merchant, size = 48.dp)
+        Column(modifier = Modifier.weight(1f)) {
             Text(
-                "${receipt.items.size} recognized ${
-                    if (receipt.items.size == 1) "item" else "items"
-                }",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary,
+                receipt.merchant ?: "Digital receipt",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
-            val reviewCount = receipt.items.count(ReceiptItem::needsReview)
-            if (reviewCount > 0) {
-                Text(
-                    "$reviewCount ${if (reviewCount == 1) "item needs" else "items need"} review",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.tertiary,
-                )
-            }
             Text(
-                "${receipt.tilePaths.size} seamless image ${
-                    if (receipt.tilePaths.size == 1) "tile" else "tiles"
-                } • ${receipt.originalFramePaths.size} original ${
-                    if (receipt.originalFramePaths.size == 1) "frame" else "frames"
-                }",
+                formatReceiptTimestamp(receipt.dateEpochMillis ?: receipt.createdAtEpochMillis),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Column(horizontalAlignment = Alignment.End) {
+            Text(
+                formatCurrency(receipt.totalCents, receipt.currency),
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                "${receipt.items.size} ${if (receipt.items.size == 1) "item" else "items"}",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+    }
+}
+
+/**
+ * Summary of the receipt's grocery items. The heading only claims the items reached the
+ * fridge once they actually have been added to the inventory.
+ */
+@Composable
+private fun FridgeItemsCard(
+    receipt: DigitalReceipt,
+    imported: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val items = receipt.items
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainer,
+        ),
+    ) {
+        Column(
+            modifier = Modifier.padding(MaterialTheme.spacing.medium),
+            verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    if (imported) "Items Added to Fridge" else "Items on This Receipt",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                )
+                if (items.isNotEmpty()) {
+                    Surface(
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary,
+                    ) {
+                        Text(
+                            "${items.size} ${if (items.size == 1) "item" else "items"}",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                        )
+                    }
+                }
+            }
+            if (items.isEmpty()) {
+                Text(
+                    "No grocery items recognized yet. Open the review sheet to check the text.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    items.take(FRIDGE_PREVIEW_COUNT).forEach { item ->
+                        InitialsBadge(item.name, size = 44.dp)
+                    }
+                    val overflow = items.size - FRIDGE_PREVIEW_COUNT
+                    if (overflow > 0) {
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                            modifier = Modifier.size(44.dp),
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Text(
+                                    "+$overflow",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private const val FRIDGE_PREVIEW_COUNT = 5
+
+@Composable
+private fun ReceiptImageCard(
+    receipt: DigitalReceipt,
+    selectedRegion: ReceiptTextRegion?,
+    fillAvailable: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small),
+    ) {
         Text(
-            formatCurrency(receipt.totalCents, receipt.currency),
-            style = MaterialTheme.typography.titleLarge,
+            "Receipt",
+            style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
         )
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .then(if (fillAvailable) Modifier.weight(1f) else Modifier),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainer,
+            ),
+        ) {
+            if (!fillAvailable) {
+                Box(
+                    modifier = Modifier.fillMaxWidth().padding(MaterialTheme.spacing.large),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small),
+                    ) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ReceiptLong,
+                            contentDescription = null,
+                            modifier = Modifier.size(40.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Text(
+                            "No receipt image",
+                            style = MaterialTheme.typography.titleSmall,
+                        )
+                        Text(
+                            "This receipt was imported from the merchant, so there is no scan to show.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center,
+                        )
+                    }
+                }
+            } else {
+                ReceiptViewer(
+                    receipt = receipt,
+                    selectedRegion = selectedRegion,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+        }
     }
 }
 
 @Composable
 private fun CompactReviewActions(
     itemCount: Int,
-    selectedCount: Int,
-    imported: Boolean,
+    onRescan: () -> Unit,
     onReview: () -> Unit,
-    onAdd: () -> Unit,
+    onDelete: () -> Unit,
 ) {
     Surface(
         modifier = Modifier.navigationBarsPadding(),
@@ -844,24 +1017,20 @@ private fun CompactReviewActions(
                 .padding(MaterialTheme.spacing.medium),
             horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small),
         ) {
-            OutlinedButton(
-                onClick = onReview,
-                modifier = Modifier.weight(1f),
-            ) {
-                Text(if (itemCount == 0) "View OCR text" else "Review items")
+            OutlinedButton(onClick = onRescan, modifier = Modifier.weight(1f)) {
+                Text("Rescan")
             }
-            Button(
-                onClick = onAdd,
-                enabled = selectedCount > 0 && !imported,
+            Button(onClick = onReview, modifier = Modifier.weight(1f)) {
+                Text(if (itemCount == 0) "View Text" else "Edit Items")
+            }
+            OutlinedButton(
+                onClick = onDelete,
                 modifier = Modifier.weight(1f),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = MaterialTheme.colorScheme.error,
+                ),
             ) {
-                Icon(
-                    if (imported) Icons.Default.Check else Icons.Default.Add,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp),
-                )
-                Spacer(Modifier.width(8.dp))
-                Text(if (imported) "Added" else "Add $selectedCount")
+                Text("Delete")
             }
         }
     }
@@ -1026,7 +1195,8 @@ private fun ReviewItemRow(
             Column(modifier = Modifier.weight(1f)) {
                 Text(item.name, style = MaterialTheme.typography.titleSmall)
                 Text(
-                    "${formatQuantity(item.quantity)} ${item.unit.orEmpty()} • ${item.category ?: "Uncategorized"}",
+                    "${formatQuantity(item.quantity)} ${item.unit.orEmpty()} • " +
+                        resolveCategory(item.category, item.name).displayName,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -1430,3 +1600,11 @@ private fun ReceiptTileImage(
 
 private fun formatQuantity(value: Double): String =
     if (value % 1.0 == 0.0) value.toInt().toString() else "%.2f".format(value)
+
+/**
+ * Bottle/container deposit lines (e.g. "Pfand Fl") are real receipt rows but not groceries, so they
+ * default to unselected. Local scans already drop these during parsing (see
+ * [com.example.groceriesapp.vision.parsing.ReceiptParser]'s NON_ITEM_LABELS), but imported receipts
+ * such as BIO COMPANY orders carry item names verbatim from the source API and skip that filter.
+ */
+private fun ReceiptItem.isDepositLine(): Boolean = name.contains("pfand", ignoreCase = true)

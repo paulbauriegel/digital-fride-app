@@ -1,0 +1,1937 @@
+{
+ "rules": {
+  "APPLE": {
+   "foodKeeperName": "Apples",
+   "freezerDays": [
+    240,
+    240
+   ],
+   "pantryDays": [
+    21,
+    21
+   ],
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    28,
+    42
+   ]
+  },
+  "APRICOT": {
+   "foodKeeperName": "Apricots",
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    2,
+    5
+   ]
+  },
+  "ASPARAGUS": {
+   "foodKeeperName": "Asparagus",
+   "freezerDays": [
+    150,
+    150
+   ],
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    3,
+    4
+   ]
+  },
+  "AVOCADO": {
+   "foodKeeperName": "Avocados",
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    3,
+    4
+   ]
+  },
+  "BACON": {
+   "foodKeeperName": "Bacon",
+   "freezerDays": [
+    30,
+    30
+   ],
+   "openedFridgeDays": [
+    7,
+    7
+   ],
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    7,
+    7
+   ]
+  },
+  "BAGUETTE": {
+   "foodKeeperName": "Commercial bread products",
+   "freezerDays": [
+    90,
+    150
+   ],
+   "openedFridgeDays": [
+    14,
+    21
+   ],
+   "pantryDays": [
+    14,
+    18
+   ],
+   "source": "USDA_FOODKEEPER"
+  },
+  "BAKING_POWDER": {
+   "foodKeeperName": "Baking powder",
+   "pantryDays": [
+    180,
+    540
+   ],
+   "source": "USDA_FOODKEEPER"
+  },
+  "BANANA": {
+   "foodKeeperName": "Bananas",
+   "freezerDays": [
+    60,
+    90
+   ],
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    3,
+    3
+   ]
+  },
+  "BEEF": {
+   "foodKeeperName": "Beef",
+   "freezerDays": [
+    120,
+    360
+   ],
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    3,
+    5
+   ]
+  },
+  "BEETROOT": {
+   "foodKeeperName": "Beets",
+   "freezerDays": [
+    180,
+    240
+   ],
+   "pantryDays": [
+    1,
+    1
+   ],
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    7,
+    14
+   ]
+  },
+  "BELL_PEPPER": {
+   "foodKeeperName": "Peppers",
+   "freezerDays": [
+    180,
+    240
+   ],
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    4,
+    14
+   ]
+  },
+  "BERRIES_MIXED": {
+   "foodKeeperName": "Berries",
+   "freezerDays": [
+    360,
+    360
+   ],
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    7,
+    7
+   ]
+  },
+  "BLACKBERRY": {
+   "foodKeeperName": "Berries",
+   "freezerDays": [
+    360,
+    360
+   ],
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    3,
+    6
+   ]
+  },
+  "BLUEBERRY": {
+   "foodKeeperName": "Blueberries",
+   "freezerDays": [
+    240,
+    360
+   ],
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    7,
+    14
+   ]
+  },
+  "BREAD": {
+   "foodKeeperName": "Commercial bread products",
+   "freezerDays": [
+    90,
+    150
+   ],
+   "openedFridgeDays": [
+    14,
+    21
+   ],
+   "pantryDays": [
+    14,
+    18
+   ],
+   "source": "USDA_FOODKEEPER"
+  },
+  "BROCCOLI": {
+   "foodKeeperName": "Broccoli and broccoli raab (rapini)",
+   "freezerDays": [
+    300,
+    360
+   ],
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    3,
+    5
+   ]
+  },
+  "BRUSSELS_SPROUTS": {
+   "foodKeeperName": "Brussels sprouts",
+   "freezerDays": [
+    300,
+    360
+   ],
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    3,
+    5
+   ]
+  },
+  "BUTTER": {
+   "foodKeeperName": "Butter",
+   "freezerDays": [
+    180,
+    270
+   ],
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    30,
+    60
+   ]
+  },
+  "BUTTERMILK": {
+   "foodKeeperName": "Buttermilk",
+   "freezerDays": [
+    90,
+    90
+   ],
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    7,
+    14
+   ]
+  },
+  "CABBAGE": {
+   "foodKeeperName": "Cabbage",
+   "freezerDays": [
+    300,
+    360
+   ],
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    7,
+    14
+   ]
+  },
+  "CAKE": {
+   "foodKeeperName": "Commercial cakes and muffins",
+   "freezerDays": [
+    180,
+    180
+   ],
+   "openedFridgeDays": [
+    7,
+    10
+   ],
+   "pantryDays": [
+    3,
+    7
+   ],
+   "source": "USDA_FOODKEEPER"
+  },
+  "CANNED_BEANS": {
+   "foodKeeperName": "Canned goods",
+   "openedFridgeDays": [
+    3,
+    4
+   ],
+   "pantryDays": [
+    730,
+    1825
+   ],
+   "source": "USDA_FOODKEEPER"
+  },
+  "CANNED_CORN": {
+   "foodKeeperName": "Canned goods",
+   "openedFridgeDays": [
+    3,
+    4
+   ],
+   "pantryDays": [
+    730,
+    1825
+   ],
+   "source": "USDA_FOODKEEPER"
+  },
+  "CANNED_FISH": {
+   "foodKeeperName": "Seafood",
+   "openedFridgeDays": [
+    1,
+    2
+   ],
+   "pantryDays": [
+    365,
+    365
+   ],
+   "source": "USDA_FOODKEEPER"
+  },
+  "CANNED_SOUP": {
+   "foodKeeperName": "Soup, stews",
+   "freezerDays": [
+    60,
+    90
+   ],
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    3,
+    4
+   ]
+  },
+  "CANNED_TOMATOES": {
+   "foodKeeperName": "Canned goods",
+   "openedFridgeDays": [
+    5,
+    7
+   ],
+   "pantryDays": [
+    360,
+    540
+   ],
+   "source": "USDA_FOODKEEPER"
+  },
+  "CARROT": {
+   "foodKeeperName": "Carrots, parsnips",
+   "freezerDays": [
+    300,
+    360
+   ],
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    14,
+    21
+   ]
+  },
+  "CAULIFLOWER": {
+   "foodKeeperName": "Cauliflower",
+   "freezerDays": [
+    300,
+    360
+   ],
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    3,
+    5
+   ]
+  },
+  "CELERY": {
+   "foodKeeperName": "Celery",
+   "freezerDays": [
+    300,
+    360
+   ],
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    7,
+    14
+   ]
+  },
+  "CHEESE": {
+   "foodKeeperName": "Cheese",
+   "freezerDays": [
+    180,
+    180
+   ],
+   "openedFridgeDays": [
+    21,
+    28
+   ],
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    180,
+    180
+   ]
+  },
+  "CHEESE_FRESH": {
+   "foodKeeperName": "Cream cheese",
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    14,
+    14
+   ]
+  },
+  "CHEESE_HARD": {
+   "foodKeeperName": "Cheese",
+   "freezerDays": [
+    180,
+    180
+   ],
+   "openedFridgeDays": [
+    21,
+    28
+   ],
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    180,
+    180
+   ]
+  },
+  "CHEESE_SLICED": {
+   "foodKeeperName": "Cheese",
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    21,
+    28
+   ]
+  },
+  "CHEESE_SOFT": {
+   "foodKeeperName": "Cheese",
+   "freezerDays": [
+    180,
+    180
+   ],
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    7,
+    14
+   ]
+  },
+  "CHERRY": {
+   "foodKeeperName": "Cherries",
+   "freezerDays": [
+    240,
+    360
+   ],
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    2,
+    3
+   ]
+  },
+  "CHICKEN": {
+   "foodKeeperName": "Chicken parts",
+   "freezerDays": [
+    270,
+    270
+   ],
+   "source": "USDA_FOODKEEPER_DE_OVERRIDE",
+   "unopenedFridgeDays": [
+    1,
+    2
+   ]
+  },
+  "CHICKPEAS": {
+   "foodKeeperName": "Beans",
+   "pantryDays": [
+    365,
+    730
+   ],
+   "source": "USDA_FOODKEEPER"
+  },
+  "CHILI": {
+   "foodKeeperName": "Hot peppers",
+   "freezerDays": [
+    270,
+    270
+   ],
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    7,
+    7
+   ]
+  },
+  "CHIPS": {
+   "foodKeeperName": "Potato chips",
+   "pantryDays": [
+    60,
+    60
+   ],
+   "source": "USDA_FOODKEEPER"
+  },
+  "CHOCOLATE": {
+   "foodKeeperName": "Chocolate",
+   "pantryDays": [
+    365,
+    730
+   ],
+   "source": "USDA_FOODKEEPER"
+  },
+  "COCONUT": {
+   "foodKeeperName": "Coconuts",
+   "pantryDays": [
+    7,
+    7
+   ],
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    14,
+    21
+   ]
+  },
+  "COCONUT_MILK": {
+   "foodKeeperName": "Coconut milk",
+   "freezerDays": [
+    90,
+    90
+   ],
+   "openedFridgeDays": [
+    4,
+    4
+   ],
+   "pantryDays": [
+    730,
+    1825
+   ],
+   "source": "USDA_FOODKEEPER"
+  },
+  "COD": {
+   "foodKeeperName": "Lean fish",
+   "freezerDays": [
+    180,
+    240
+   ],
+   "source": "USDA_FOODKEEPER_DE_OVERRIDE",
+   "unopenedFridgeDays": [
+    1,
+    2
+   ]
+  },
+  "COFFEE": {
+   "foodKeeperName": "Coffee",
+   "openedFridgeDays": [
+    90,
+    120
+   ],
+   "pantryDays": [
+    90,
+    150
+   ],
+   "source": "USDA_FOODKEEPER"
+  },
+  "COLD_CUTS": {
+   "foodKeeperName": "Luncheon meat or poultry",
+   "freezerDays": [
+    30,
+    60
+   ],
+   "openedFridgeDays": [
+    3,
+    5
+   ],
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    14,
+    14
+   ]
+  },
+  "COMPOTE": {
+   "foodKeeperName": "Applesauce",
+   "openedFridgeDays": [
+    7,
+    10
+   ],
+   "pantryDays": [
+    360,
+    540
+   ],
+   "source": "USDA_FOODKEEPER"
+  },
+  "COOKIES": {
+   "foodKeeperName": "Cookies",
+   "freezerDays": [
+    240,
+    360
+   ],
+   "pantryDays": [
+    60,
+    90
+   ],
+   "source": "USDA_FOODKEEPER"
+  },
+  "CORN": {
+   "foodKeeperName": "Corn on the cob",
+   "freezerDays": [
+    240,
+    240
+   ],
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    1,
+    2
+   ]
+  },
+  "CORNFLAKES": {
+   "foodKeeperName": "Cereal",
+   "pantryDays": [
+    180,
+    360
+   ],
+   "source": "USDA_FOODKEEPER"
+  },
+  "CREAM": {
+   "foodKeeperName": "Cream",
+   "openedFridgeDays": [
+    7,
+    7
+   ],
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    30,
+    30
+   ]
+  },
+  "CROISSANT": {
+   "foodKeeperName": "Commercial cakes and muffins",
+   "freezerDays": [
+    180,
+    180
+   ],
+   "openedFridgeDays": [
+    7,
+    10
+   ],
+   "pantryDays": [
+    3,
+    7
+   ],
+   "source": "USDA_FOODKEEPER"
+  },
+  "CUCUMBER": {
+   "foodKeeperName": "Cucumbers",
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    4,
+    6
+   ]
+  },
+  "CURRANT": {
+   "foodKeeperName": "Berries",
+   "freezerDays": [
+    360,
+    360
+   ],
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    3,
+    6
+   ]
+  },
+  "DATE_FRUIT": {
+   "foodKeeperName": "Dates",
+   "freezerDays": [
+    365,
+    730
+   ],
+   "pantryDays": [
+    60,
+    60
+   ],
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    360,
+    360
+   ]
+  },
+  "DONUT": {
+   "foodKeeperName": "Doughnuts",
+   "openedFridgeDays": [
+    2,
+    2
+   ],
+   "pantryDays": [
+    1,
+    2
+   ],
+   "source": "USDA_FOODKEEPER"
+  },
+  "EGGPLANT": {
+   "foodKeeperName": "Eggplant",
+   "freezerDays": [
+    180,
+    240
+   ],
+   "pantryDays": [
+    1,
+    1
+   ],
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    4,
+    7
+   ]
+  },
+  "EGGS": {
+   "foodKeeperName": "Eggs",
+   "source": "USDA_FOODKEEPER_DE_OVERRIDE",
+   "unopenedFridgeDays": [
+    21,
+    28
+   ]
+  },
+  "FISH": {
+   "foodKeeperName": "Lean fish",
+   "freezerDays": [
+    180,
+    240
+   ],
+   "source": "USDA_FOODKEEPER_DE_OVERRIDE",
+   "unopenedFridgeDays": [
+    1,
+    2
+   ]
+  },
+  "FISH_STICKS": {
+   "foodKeeperName": "Fish",
+   "freezerDays": [
+    540,
+    540
+   ],
+   "source": "USDA_FOODKEEPER"
+  },
+  "FLAMMKUCHEN": {
+   "foodKeeperName": "Pizza",
+   "freezerDays": [
+    360,
+    360
+   ],
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    3,
+    4
+   ]
+  },
+  "FLATBREAD": {
+   "foodKeeperName": "Commercial bread products",
+   "freezerDays": [
+    90,
+    150
+   ],
+   "openedFridgeDays": [
+    14,
+    21
+   ],
+   "pantryDays": [
+    14,
+    18
+   ],
+   "source": "USDA_FOODKEEPER"
+  },
+  "FLOUR": {
+   "foodKeeperName": "Flour",
+   "openedFridgeDays": [
+    365,
+    365
+   ],
+   "pantryDays": [
+    180,
+    360
+   ],
+   "source": "USDA_FOODKEEPER"
+  },
+  "FROZEN_FRIES": {
+   "foodKeeperName": "Frozen potato products",
+   "freezerDays": [
+    360,
+    360
+   ],
+   "source": "USDA_FOODKEEPER"
+  },
+  "FROZEN_PIZZA": {
+   "foodKeeperName": "Pizza",
+   "freezerDays": [
+    360,
+    360
+   ],
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    3,
+    4
+   ]
+  },
+  "FROZEN_VEG": {
+   "foodKeeperName": "Vegetables",
+   "freezerDays": [
+    300,
+    540
+   ],
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    3,
+    4
+   ]
+  },
+  "GARLIC": {
+   "foodKeeperName": "Garlic",
+   "freezerDays": [
+    30,
+    30
+   ],
+   "pantryDays": [
+    30,
+    30
+   ],
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    3,
+    14
+   ]
+  },
+  "GINGER": {
+   "foodKeeperName": "Ginger root",
+   "freezerDays": [
+    180,
+    180
+   ],
+   "pantryDays": [
+    2,
+    5
+   ],
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    14,
+    21
+   ]
+  },
+  "GINGER_BEER": {
+   "foodKeeperName": "Soda",
+   "openedFridgeDays": [
+    2,
+    3
+   ],
+   "source": "USDA_FOODKEEPER"
+  },
+  "GNOCCHI": {
+   "foodKeeperName": "Fresh pasta",
+   "freezerDays": [
+    60,
+    60
+   ],
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    1,
+    2
+   ]
+  },
+  "GRAPEFRUIT": {
+   "foodKeeperName": "Citrus fruit",
+   "pantryDays": [
+    10,
+    10
+   ],
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    10,
+    21
+   ]
+  },
+  "GRAPES": {
+   "foodKeeperName": "Grapes",
+   "freezerDays": [
+    30,
+    30
+   ],
+   "pantryDays": [
+    1,
+    1
+   ],
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    7,
+    7
+   ]
+  },
+  "GREEN_BEANS": {
+   "foodKeeperName": "Beans and peas",
+   "freezerDays": [
+    240,
+    240
+   ],
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    3,
+    5
+   ]
+  },
+  "HAM": {
+   "foodKeeperName": "Ham",
+   "freezerDays": [
+    30,
+    60
+   ],
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    3,
+    4
+   ]
+  },
+  "HERBS_FRESH": {
+   "foodKeeperName": "Herbs",
+   "freezerDays": [
+    30,
+    60
+   ],
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    7,
+    10
+   ]
+  },
+  "HERRING": {
+   "foodKeeperName": "Herring",
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    120,
+    180
+   ]
+  },
+  "HMILCH": {
+   "foodKeeperName": "UHT milk (no FoodKeeper entry; hand-estimated, needs review)",
+   "openedFridgeDays": [
+    5,
+    7
+   ],
+   "pantryDays": [
+    60,
+    180
+   ],
+   "source": "MANUAL_ESTIMATE"
+  },
+  "HONEY": {
+   "foodKeeperName": "Honey",
+   "pantryDays": [
+    730,
+    730
+   ],
+   "source": "USDA_FOODKEEPER"
+  },
+  "ICE_CREAM": {
+   "foodKeeperName": "Ice cream",
+   "freezerDays": [
+    180,
+    180
+   ],
+   "source": "USDA_FOODKEEPER"
+  },
+  "JAM": {
+   "foodKeeperName": "Jams, jellies, and preserves",
+   "openedFridgeDays": [
+    180,
+    360
+   ],
+   "pantryDays": [
+    180,
+    540
+   ],
+   "source": "USDA_FOODKEEPER"
+  },
+  "JUICE": {
+   "foodKeeperName": "Fruit Juice in cartons, fruit drinks, punch",
+   "openedFridgeDays": [
+    8,
+    12
+   ],
+   "pantryDays": [
+    21,
+    21
+   ],
+   "source": "USDA_FOODKEEPER"
+  },
+  "KETCHUP": {
+   "foodKeeperName": "Ketchup, cocktail, or chili sauce",
+   "openedFridgeDays": [
+    180,
+    180
+   ],
+   "pantryDays": [
+    365,
+    365
+   ],
+   "source": "USDA_FOODKEEPER"
+  },
+  "KIWI": {
+   "foodKeeperName": "Kiwi fruit",
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    3,
+    6
+   ]
+  },
+  "KOHLRABI": {
+   "foodKeeperName": "Kohlrabi",
+   "freezerDays": [
+    240,
+    360
+   ],
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    7,
+    7
+   ]
+  },
+  "LAMB": {
+   "foodKeeperName": "Lamb",
+   "freezerDays": [
+    120,
+    360
+   ],
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    3,
+    5
+   ]
+  },
+  "LEEK": {
+   "foodKeeperName": "Leeks",
+   "freezerDays": [
+    300,
+    360
+   ],
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    7,
+    14
+   ]
+  },
+  "LEMON": {
+   "foodKeeperName": "Citrus fruit",
+   "pantryDays": [
+    10,
+    10
+   ],
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    10,
+    21
+   ]
+  },
+  "LENTILS": {
+   "foodKeeperName": "Lentils",
+   "pantryDays": [
+    365,
+    365
+   ],
+   "source": "USDA_FOODKEEPER"
+  },
+  "LETTUCE": {
+   "foodKeeperName": "Lettuce",
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    7,
+    14
+   ]
+  },
+  "LIME": {
+   "foodKeeperName": "Citrus fruit",
+   "pantryDays": [
+    10,
+    10
+   ],
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    10,
+    21
+   ]
+  },
+  "MACKEREL": {
+   "foodKeeperName": "Fatty fish",
+   "freezerDays": [
+    60,
+    90
+   ],
+   "source": "USDA_FOODKEEPER_DE_OVERRIDE",
+   "unopenedFridgeDays": [
+    1,
+    2
+   ]
+  },
+  "MANGO": {
+   "foodKeeperName": "Papaya, mango, feijoa, passionfruit, casaha melon",
+   "freezerDays": [
+    180,
+    240
+   ],
+   "pantryDays": [
+    3,
+    5
+   ],
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    7,
+    7
+   ]
+  },
+  "MARGARINE": {
+   "foodKeeperName": "Margarine",
+   "freezerDays": [
+    360,
+    360
+   ],
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    180,
+    180
+   ]
+  },
+  "MAYONNAISE": {
+   "foodKeeperName": "Mayonnaise",
+   "openedFridgeDays": [
+    60,
+    60
+   ],
+   "pantryDays": [
+    90,
+    180
+   ],
+   "source": "USDA_FOODKEEPER"
+  },
+  "MELON": {
+   "foodKeeperName": "Melons",
+   "freezerDays": [
+    30,
+    30
+   ],
+   "openedFridgeDays": [
+    2,
+    4
+   ],
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    14,
+    14
+   ]
+  },
+  "MILCHREIS": {
+   "foodKeeperName": "Rice",
+   "openedFridgeDays": [
+    180,
+    180
+   ],
+   "pantryDays": [
+    730,
+    730
+   ],
+   "source": "USDA_FOODKEEPER"
+  },
+  "MINCED_MEAT": {
+   "foodKeeperName": "Beef",
+   "freezerDays": [
+    90,
+    120
+   ],
+   "source": "USDA_FOODKEEPER_DE_OVERRIDE",
+   "unopenedFridgeDays": [
+    1,
+    1
+   ]
+  },
+  "MUESLI": {
+   "foodKeeperName": "Cereal",
+   "pantryDays": [
+    180,
+    360
+   ],
+   "source": "USDA_FOODKEEPER"
+  },
+  "MUSHROOM": {
+   "foodKeeperName": "Mushrooms",
+   "freezerDays": [
+    300,
+    360
+   ],
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    3,
+    7
+   ]
+  },
+  "MUSSELS": {
+   "foodKeeperName": "Fresh clams, mussels, oysters",
+   "source": "USDA_FOODKEEPER_DE_OVERRIDE",
+   "unopenedFridgeDays": [
+    1,
+    1
+   ]
+  },
+  "MUSTARD": {
+   "foodKeeperName": "Mustard",
+   "openedFridgeDays": [
+    365,
+    365
+   ],
+   "pantryDays": [
+    365,
+    730
+   ],
+   "source": "USDA_FOODKEEPER"
+  },
+  "NECTARINE": {
+   "foodKeeperName": "Peaches, nectarines, plums, pears, sapote",
+   "freezerDays": [
+    60,
+    60
+   ],
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    3,
+    5
+   ]
+  },
+  "NUTS": {
+   "foodKeeperName": "Nuts",
+   "freezerDays": [
+    180,
+    360
+   ],
+   "openedFridgeDays": [
+    120,
+    180
+   ],
+   "pantryDays": [
+    365,
+    365
+   ],
+   "source": "USDA_FOODKEEPER"
+  },
+  "NUT_SPREAD": {
+   "foodKeeperName": "Peanut butter",
+   "pantryDays": [
+    180,
+    720
+   ],
+   "source": "USDA_FOODKEEPER"
+  },
+  "OATS": {
+   "foodKeeperName": "Oats",
+   "freezerDays": [
+    240,
+    240
+   ],
+   "pantryDays": [
+    120,
+    120
+   ],
+   "source": "USDA_FOODKEEPER"
+  },
+  "OIL": {
+   "foodKeeperName": "Oils",
+   "openedFridgeDays": [
+    120,
+    120
+   ],
+   "pantryDays": [
+    180,
+    360
+   ],
+   "source": "USDA_FOODKEEPER"
+  },
+  "OLIVES": {
+   "foodKeeperName": "Olives",
+   "openedFridgeDays": [
+    14,
+    14
+   ],
+   "pantryDays": [
+    360,
+    540
+   ],
+   "source": "USDA_FOODKEEPER"
+  },
+  "ONION": {
+   "foodKeeperName": "Onions",
+   "freezerDays": [
+    300,
+    360
+   ],
+   "pantryDays": [
+    30,
+    30
+   ],
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    60,
+    60
+   ]
+  },
+  "ORANGE": {
+   "foodKeeperName": "Citrus fruit",
+   "pantryDays": [
+    10,
+    10
+   ],
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    10,
+    21
+   ]
+  },
+  "PANCAKE": {
+   "foodKeeperName": "Pancakes, waffles",
+   "freezerDays": [
+    90,
+    90
+   ],
+   "source": "USDA_FOODKEEPER"
+  },
+  "PASTA": {
+   "foodKeeperName": "Pasta",
+   "pantryDays": [
+    730,
+    730
+   ],
+   "source": "USDA_FOODKEEPER"
+  },
+  "PEACH": {
+   "foodKeeperName": "Peaches, nectarines, plums, pears, sapote",
+   "freezerDays": [
+    60,
+    60
+   ],
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    3,
+    5
+   ]
+  },
+  "PEAR": {
+   "foodKeeperName": "Peaches, nectarines, plums, pears, sapote",
+   "freezerDays": [
+    60,
+    60
+   ],
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    3,
+    5
+   ]
+  },
+  "PEAS": {
+   "foodKeeperName": "Beans and peas",
+   "freezerDays": [
+    240,
+    240
+   ],
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    3,
+    5
+   ]
+  },
+  "PEPPER_SPICE": {
+   "foodKeeperName": "Black pepper",
+   "pantryDays": [
+    730,
+    730
+   ],
+   "source": "USDA_FOODKEEPER"
+  },
+  "PESTO": {
+   "foodKeeperName": "Pesto",
+   "freezerDays": [
+    30,
+    30
+   ],
+   "openedFridgeDays": [
+    3,
+    3
+   ],
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    180,
+    180
+   ]
+  },
+  "PICKLES": {
+   "foodKeeperName": "Pickles",
+   "openedFridgeDays": [
+    30,
+    90
+   ],
+   "pantryDays": [
+    365,
+    365
+   ],
+   "source": "USDA_FOODKEEPER"
+  },
+  "PINEAPPLE": {
+   "foodKeeperName": "Pineapple",
+   "freezerDays": [
+    300,
+    360
+   ],
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    5,
+    7
+   ]
+  },
+  "PLANT_MILK": {
+   "foodKeeperName": "Soy milk",
+   "openedFridgeDays": [
+    7,
+    10
+   ],
+   "source": "USDA_FOODKEEPER"
+  },
+  "PLUM": {
+   "foodKeeperName": "Peaches, nectarines, plums, pears, sapote",
+   "freezerDays": [
+    60,
+    60
+   ],
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    3,
+    5
+   ]
+  },
+  "POLLOCK": {
+   "foodKeeperName": "Lean fish",
+   "freezerDays": [
+    120,
+    240
+   ],
+   "source": "USDA_FOODKEEPER_DE_OVERRIDE",
+   "unopenedFridgeDays": [
+    1,
+    2
+   ]
+  },
+  "POMEGRANATE": {
+   "foodKeeperName": "Pomegranate",
+   "freezerDays": [
+    300,
+    360
+   ],
+   "pantryDays": [
+    2,
+    5
+   ],
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    30,
+    90
+   ]
+  },
+  "POPCORN": {
+   "foodKeeperName": "Popcorn",
+   "pantryDays": [
+    60,
+    90
+   ],
+   "source": "USDA_FOODKEEPER"
+  },
+  "PORK": {
+   "foodKeeperName": "Pork",
+   "freezerDays": [
+    120,
+    360
+   ],
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    3,
+    5
+   ]
+  },
+  "POTATO": {
+   "foodKeeperName": "Potatoes",
+   "freezerDays": [
+    300,
+    360
+   ],
+   "pantryDays": [
+    30,
+    60
+   ],
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    7,
+    14
+   ]
+  },
+  "PRETZEL": {
+   "foodKeeperName": "Pretzels",
+   "pantryDays": [
+    120,
+    270
+   ],
+   "source": "USDA_FOODKEEPER"
+  },
+  "PUDDING": {
+   "foodKeeperName": "Pudding",
+   "openedFridgeDays": [
+    2,
+    2
+   ],
+   "source": "USDA_FOODKEEPER"
+  },
+  "PUMPKIN": {
+   "foodKeeperName": "Pumpkins",
+   "pantryDays": [
+    60,
+    90
+   ],
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    90,
+    150
+   ]
+  },
+  "QUARK": {
+   "foodKeeperName": "Quark",
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    7,
+    10
+   ]
+  },
+  "QUINOA": {
+   "foodKeeperName": "Quinoa",
+   "pantryDays": [
+    730,
+    1095
+   ],
+   "source": "USDA_FOODKEEPER"
+  },
+  "RADISH": {
+   "foodKeeperName": "Radishes",
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    10,
+    14
+   ]
+  },
+  "RASPBERRY": {
+   "foodKeeperName": "Raspberries",
+   "freezerDays": [
+    240,
+    360
+   ],
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    2,
+    3
+   ]
+  },
+  "RHUBARB": {
+   "foodKeeperName": "Rhubarb",
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    3,
+    7
+   ]
+  },
+  "RICE": {
+   "foodKeeperName": "Rice",
+   "openedFridgeDays": [
+    180,
+    180
+   ],
+   "pantryDays": [
+    730,
+    730
+   ],
+   "source": "USDA_FOODKEEPER"
+  },
+  "ROLL": {
+   "foodKeeperName": "Commercial bread products",
+   "freezerDays": [
+    90,
+    150
+   ],
+   "openedFridgeDays": [
+    14,
+    21
+   ],
+   "pantryDays": [
+    14,
+    18
+   ],
+   "source": "USDA_FOODKEEPER"
+  },
+  "SALAD_DRESSING": {
+   "foodKeeperName": "Salad dressings",
+   "openedFridgeDays": [
+    30,
+    90
+   ],
+   "pantryDays": [
+    300,
+    360
+   ],
+   "source": "USDA_FOODKEEPER"
+  },
+  "SALAMI": {
+   "foodKeeperName": "Salami",
+   "freezerDays": [
+    30,
+    60
+   ],
+   "openedFridgeDays": [
+    3,
+    5
+   ],
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    14,
+    14
+   ]
+  },
+  "SALMON": {
+   "foodKeeperName": "Fatty fish",
+   "freezerDays": [
+    60,
+    90
+   ],
+   "source": "USDA_FOODKEEPER_DE_OVERRIDE",
+   "unopenedFridgeDays": [
+    1,
+    2
+   ]
+  },
+  "SALTY_SNACKS": {
+   "foodKeeperName": "Pretzels",
+   "pantryDays": [
+    120,
+    270
+   ],
+   "source": "USDA_FOODKEEPER"
+  },
+  "SAUSAGE": {
+   "foodKeeperName": "Sausage",
+   "freezerDays": [
+    30,
+    60
+   ],
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    1,
+    2
+   ]
+  },
+  "SHRIMP": {
+   "foodKeeperName": "Shrimp, crayfish",
+   "freezerDays": [
+    180,
+    540
+   ],
+   "source": "USDA_FOODKEEPER_DE_OVERRIDE",
+   "unopenedFridgeDays": [
+    1,
+    2
+   ]
+  },
+  "SKYR": {
+   "foodKeeperName": "Yogurt",
+   "freezerDays": [
+    30,
+    60
+   ],
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    7,
+    14
+   ]
+  },
+  "SOFT_DRINK": {
+   "foodKeeperName": "Soda",
+   "openedFridgeDays": [
+    2,
+    3
+   ],
+   "source": "USDA_FOODKEEPER"
+  },
+  "SOY_SAUCE": {
+   "foodKeeperName": "Soy sauce or teriyaki sauce",
+   "openedFridgeDays": [
+    30,
+    30
+   ],
+   "pantryDays": [
+    1095,
+    1095
+   ],
+   "source": "USDA_FOODKEEPER"
+  },
+  "SPARKLING_WINE": {
+   "foodKeeperName": "Red wine",
+   "openedFridgeDays": [
+    1,
+    3
+   ],
+   "pantryDays": [
+    1095,
+    1825
+   ],
+   "source": "USDA_FOODKEEPER"
+  },
+  "SPICE_MIX": {
+   "foodKeeperName": "Spice/spices",
+   "pantryDays": [
+    730,
+    1095
+   ],
+   "source": "USDA_FOODKEEPER"
+  },
+  "SPINACH": {
+   "foodKeeperName": "Lettuce",
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    3,
+    7
+   ]
+  },
+  "STOCK": {
+   "foodKeeperName": "Vegetable stock/broth",
+   "freezerDays": [
+    60,
+    90
+   ],
+   "openedFridgeDays": [
+    3,
+    4
+   ],
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    7,
+    7
+   ]
+  },
+  "STRAWBERRY": {
+   "foodKeeperName": "Strawberries",
+   "freezerDays": [
+    240,
+    360
+   ],
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    2,
+    3
+   ]
+  },
+  "SWEET_POTATO": {
+   "foodKeeperName": "Yams/sweet potatoes",
+   "pantryDays": [
+    14,
+    21
+   ],
+   "source": "USDA_FOODKEEPER"
+  },
+  "TEA": {
+   "foodKeeperName": "Tea",
+   "pantryDays": [
+    540,
+    1080
+   ],
+   "source": "USDA_FOODKEEPER"
+  },
+  "TOAST": {
+   "foodKeeperName": "Commercial bread products",
+   "freezerDays": [
+    90,
+    150
+   ],
+   "openedFridgeDays": [
+    14,
+    21
+   ],
+   "pantryDays": [
+    14,
+    18
+   ],
+   "source": "USDA_FOODKEEPER"
+  },
+  "TOMATO": {
+   "foodKeeperName": "Tomatoes",
+   "freezerDays": [
+    60,
+    60
+   ],
+   "source": "USDA_FOODKEEPER"
+  },
+  "TOMATO_SAUCE": {
+   "foodKeeperName": "Spaghetti sauce",
+   "openedFridgeDays": [
+    4,
+    4
+   ],
+   "pantryDays": [
+    540,
+    540
+   ],
+   "source": "USDA_FOODKEEPER"
+  },
+  "TORTILLA": {
+   "foodKeeperName": "Tortillas",
+   "freezerDays": [
+    180,
+    180
+   ],
+   "openedFridgeDays": [
+    90,
+    90
+   ],
+   "pantryDays": [
+    90,
+    90
+   ],
+   "source": "USDA_FOODKEEPER"
+  },
+  "TROUT": {
+   "foodKeeperName": "Lean fish",
+   "freezerDays": [
+    120,
+    240
+   ],
+   "source": "USDA_FOODKEEPER_DE_OVERRIDE",
+   "unopenedFridgeDays": [
+    1,
+    2
+   ]
+  },
+  "TUNA": {
+   "foodKeeperName": "Fatty fish",
+   "freezerDays": [
+    60,
+    90
+   ],
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    1,
+    2
+   ]
+  },
+  "TURKEY": {
+   "foodKeeperName": "Turkey parts",
+   "freezerDays": [
+    270,
+    270
+   ],
+   "source": "USDA_FOODKEEPER_DE_OVERRIDE",
+   "unopenedFridgeDays": [
+    1,
+    2
+   ]
+  },
+  "VANILLA": {
+   "foodKeeperName": "Pure vanilla extract",
+   "pantryDays": [
+    730,
+    730
+   ],
+   "source": "USDA_FOODKEEPER"
+  },
+  "VINEGAR": {
+   "foodKeeperName": "Vinegar",
+   "pantryDays": [
+    730,
+    730
+   ],
+   "source": "USDA_FOODKEEPER"
+  },
+  "WAFFLE": {
+   "foodKeeperName": "Pancakes, waffles",
+   "freezerDays": [
+    90,
+    90
+   ],
+   "source": "USDA_FOODKEEPER"
+  },
+  "WATERMELON": {
+   "foodKeeperName": "Watermelon",
+   "freezerDays": [
+    360,
+    360
+   ],
+   "pantryDays": [
+    1,
+    2
+   ],
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    3,
+    4
+   ]
+  },
+  "WHOLEGRAIN_BREAD": {
+   "foodKeeperName": "Whole wheat bread",
+   "freezerDays": [
+    90,
+    90
+   ],
+   "pantryDays": [
+    3,
+    5
+   ],
+   "source": "USDA_FOODKEEPER"
+  },
+  "WHOLE_MILK": {
+   "foodKeeperName": "Milk",
+   "freezerDays": [
+    90,
+    90
+   ],
+   "source": "USDA_FOODKEEPER"
+  },
+  "WINE": {
+   "foodKeeperName": "Red wine",
+   "openedFridgeDays": [
+    1,
+    3
+   ],
+   "pantryDays": [
+    1095,
+    1825
+   ],
+   "source": "USDA_FOODKEEPER"
+  },
+  "YOGURT": {
+   "foodKeeperName": "Yogurt",
+   "freezerDays": [
+    30,
+    60
+   ],
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    7,
+    14
+   ]
+  },
+  "ZUCCHINI": {
+   "foodKeeperName": "Zucchini",
+   "freezerDays": [
+    300,
+    300
+   ],
+   "source": "USDA_FOODKEEPER",
+   "unopenedFridgeDays": [
+    7,
+    7
+   ]
+  }
+ },
+ "source": "USDA FSIS FoodKeeper (public domain / CC0), dataset version 128, modified 2018-09-06"
+}

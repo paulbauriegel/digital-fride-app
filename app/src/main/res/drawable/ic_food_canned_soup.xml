@@ -1,0 +1,47 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="72dp"
+    android:height="72dp"
+    android:viewportWidth="72"
+    android:viewportHeight="72">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M7 36c0 16.02 12.98 29 29 29s29-12.98 29-29H7z"/>
+    <path
+        android:fillColor="#FFD0CFCE"
+        android:pathData="M49 36c0 16.02-4 29-13 29 16.02 0 29-12.98 29-29H49z"/>
+    <path
+        android:strokeColor="#FF000000"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeMiterLimit="10"
+        android:pathData="M7 36c0 16.02 12.98 29 29 29s29-12.98 29-29H7z"/>
+    <path
+        android:strokeColor="#FF000000"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeMiterLimit="10"
+        android:pathData="M7 25.14l7 7"/>
+    <path
+        android:strokeColor="#FF000000"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeMiterLimit="10"
+        android:pathData="M29.04 7.85c0.1 1.12 0.56 2.22 1.42 3.08 1.96 1.95 1.96 5.12 0 7.07-1.95 1.95-1.95 5.12 0 7.07 1.96 1.95 1.96 5.12 0 7.07"/>
+    <path
+        android:strokeColor="#FF000000"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeMiterLimit="10"
+        android:pathData="M34.57 7.04c-0.1 1.4 0.36 2.82 1.43 3.89 1.95 1.95 1.95 5.12 0 7.07-1.95 1.95-1.95 5.12 0 7.07 1.95 1.95 1.95 5.12 0 7.07"/>
+    <path
+        android:strokeColor="#FF000000"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeMiterLimit="10"
+        android:pathData="M40.01 7.28c-0.03 1.32 0.45 2.65 1.45 3.65 1.96 1.95 1.96 5.12 0 7.07-1.95 1.95-1.95 5.12 0 7.07 1.96 1.95 1.96 5.12 0 7.07"/>
+</vector>

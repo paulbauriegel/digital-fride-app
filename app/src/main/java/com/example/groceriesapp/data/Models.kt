@@ -5,6 +5,7 @@ import java.util.UUID
 enum class ReceiptSource {
     CAPTURED,
     BIO_COMPANY,
+    REWE,
 }
 
 enum class ReceiptStatus {
@@ -50,6 +51,7 @@ data class ReceiptItem(
     val unit: String? = null,
     val priceCents: Int? = null,
     val category: String? = null,
+    val foodConceptId: String? = null,
     val textRegionId: String? = null,
     val needsReview: Boolean = false,
     val id: String = UUID.randomUUID().toString(),
@@ -105,6 +107,7 @@ data class DigitalReceipt(
     val source: ReceiptSource = ReceiptSource.CAPTURED,
     val bioCompanyReceiptNumber: Int? = null,
     val bioCompanyCheckout: Int? = null,
+    val reweReceiptId: String? = null,
 ) {
     init {
         require(id.isNotBlank()) { "Receipt ID must not be blank." }
@@ -115,11 +118,20 @@ data class DigitalReceipt(
 data class InventoryItem(
     val name: String,
     val category: String? = null,
+    val foodConceptId: String? = null,
     val quantity: Double = 1.0,
     val unit: String? = null,
     val priceCents: Int? = null,
     val purchasedAtEpochMillis: Long? = null,
+    /** Earliest edge of the estimated window, or the exact date when read off packaging. */
     val expiresAtEpochMillis: Long? = null,
+    val expiryRangeEndEpochMillis: Long? = null,
+    /** [com.example.groceriesapp.data.taxonomy.ExpirySource] name, or null when unknown. */
+    val expiryEstimateSource: String? = null,
+    val openedAtEpochMillis: Long? = null,
+    /** Reserved for packaging-date OCR, which no capture flow populates yet. */
+    val printedDateEpochMillis: Long? = null,
+    val printedDateType: String? = null,
     val receiptId: String? = null,
     val receiptItemId: String? = null,
     val addedAtEpochMillis: Long = System.currentTimeMillis(),

@@ -1,5 +1,7 @@
 package com.example.groceriesapp.vision.parsing
 
+import com.example.groceriesapp.data.taxonomy.FoodConceptCatalog
+import com.example.groceriesapp.data.taxonomy.GroceryCategory
 import java.math.BigDecimal
 import java.math.RoundingMode
 import java.time.LocalDate
@@ -15,7 +17,9 @@ data class ParsedLineItem(
     val quantity: Double = 1.0,
     val unit: String = "pc",
     val lineTotalCents: Long,
+    /** Canonical [GroceryCategory] name, e.g. "DAIRY". */
     val category: String,
+    val foodConceptId: String?,
     val needsReview: Boolean,
 )
 
@@ -128,22 +132,17 @@ class ReceiptParser(
             .trim(' ', '-', 'x', 'X')
             .ifBlank { rawName }
 
+        val concept = FoodConceptCatalog.match(cleanedName)
         return ParsedLineItem(
             name = cleanedName.lowercase(Locale.GERMANY)
                 .replaceFirstChar { it.titlecase(Locale.GERMANY) },
             quantity = quantity,
             unit = unit,
             lineTotalCents = cents,
-            category = inferCategory(cleanedName),
+            category = (concept?.category ?: GroceryCategory.OTHER).name,
+            foodConceptId = concept?.id,
             needsReview = rawName.length < 4 || OCR_AMBIGUITY.containsMatchIn(rawName),
         )
-    }
-
-    private fun inferCategory(name: String): String {
-        val normalized = name.lowercase(Locale.GERMANY)
-        return CATEGORY_KEYWORDS.entries.firstOrNull { (_, words) ->
-            words.any(normalized::contains)
-        }?.key ?: "Other"
     }
 
     private fun normalizeLine(value: String): String = value
@@ -250,24 +249,6 @@ class ReceiptParser(
             "ersparnis",
             "kassenbon",
             "transaktion",
-        )
-        val CATEGORY_KEYWORDS = linkedMapOf(
-            "Fruit" to listOf("apfel", "äpfel", "banane", "orange", "zitrone", "beere", "traube"),
-            "Vegetables" to listOf(
-                "tomate",
-                "gurke",
-                "paprika",
-                "brokkoli",
-                "spinat",
-                "salat",
-                "kartoffel",
-                "zwiebel",
-            ),
-            "Dairy" to listOf("milch", "joghurt", "quark", "käse", "butter", "sahne"),
-            "Meat & Fish" to listOf("huhn", "hähnchen", "rind", "schwein", "lachs", "fisch", "wurst"),
-            "Bakery" to listOf("brot", "brötchen", "toast", "baguette"),
-            "Pantry" to listOf("reis", "nudel", "mehl", "zucker", "öl", "oel", "müsli"),
-            "Drinks" to listOf("wasser", "saft", "cola", "limonade", "bier", "wein"),
         )
     }
 }

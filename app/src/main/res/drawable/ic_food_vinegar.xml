@@ -1,0 +1,52 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="72dp"
+    android:height="72dp"
+    android:viewportWidth="72"
+    android:viewportHeight="72">
+    <path
+        android:fillColor="#FF92D3F5"
+        android:pathData="M33 5.5v12L28.6 31l0.62 4 0.28 2-1.5 5v25h16V42l-1.5-5 0.28-2 0.63-4L39 17.5v-12z"/>
+    <path
+        android:fillColor="#FF9B9B9A"
+        android:pathData="M32.5 5c0-0.55 0.45-1 1-1h5c0.55 0 1 0.45 1 1v2.5c0 0.55-0.45 1-1 1h-5c-0.55 0-1-0.45-1-1z"/>
+    <path
+        android:fillColor="#FF61B2E4"
+        android:pathData="M39 7.5V17l4.5 14-1 6 1.5 5v25h-4V43c0-1.5-1-3-1-5.5s2-3.5 2-5.5c0-3.5-5-12.5-5-19.5v-5z"/>
+    <path
+        android:fillColor="#FF3F3F3F"
+        android:pathData="M36 4v4.5h2.5c0.55 0 1-0.45 1-1V5c0-0.55-0.45-1-1-1z"/>
+    <path
+        android:pathData="M36 30a1 1 0 1 0 0 2 1 1 0 1 0 0-2z"/>
+    <path
+        android:pathData="M36 34a1 1 0 1 0 0 2 1 1 0 1 0 0-2z"/>
+    <path
+        android:pathData="M38.5 32a0.9 1 0 1 0 0 2 0.9 1 0 1 0 0-2z"/>
+    <path
+        android:pathData="M33.5 32a0.9 1 0 1 0 0 2 0.9 1 0 1 0 0-2z"/>
+    <path
+        android:pathData="M40.5 30a0.75 1 0 1 0 0 2 0.75 1 0 1 0 0-2z"/>
+    <path
+        android:pathData="M40.5 34a0.75 1 0 1 0 0 2 0.75 1 0 1 0 0-2z"/>
+    <path
+        android:pathData="M31.5 30a0.75 1 0 1 0 0 2 0.75 1 0 1 0 0-2z"/>
+    <path
+        android:pathData="M31.5 34a0.75 1 0 1 0 0 2 0.75 1 0 1 0 0-2z"/>
+    <path
+        android:strokeColor="#FF000000"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M33.5 7.5h5"/>
+    <path
+        android:strokeColor="#FF000000"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M31.5 43.5h9"/>
+    <path
+        android:strokeColor="#FF000000"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M38 11v1.5c0 4.5 5.5 16 5.5 19.5 0 2-1 3-1 5s1.5 3 1.5 6v24H28V43c0-3 1.5-4 1.5-6s-1-3-1-5c0-3.5 5.5-15 5.5-19.5V11"/>
+</vector>

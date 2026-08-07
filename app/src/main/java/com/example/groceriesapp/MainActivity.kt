@@ -16,6 +16,7 @@ import androidx.core.view.WindowCompat
 import androidx.core.content.edit
 import com.example.groceriesapp.data.BioCompanyRepository
 import com.example.groceriesapp.data.GroceriesRepository
+import com.example.groceriesapp.data.ReweRepository
 import com.example.groceriesapp.ui.GroceriesApp
 import com.example.groceriesapp.ui.theme.GroceriesTheme
 import com.example.groceriesapp.vision.ocr.GlmOcrModelManager
@@ -29,6 +30,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         val repository = GroceriesRepository(applicationContext)
         val bioCompanyRepository = BioCompanyRepository(applicationContext)
+        val reweRepository = ReweRepository(applicationContext)
         val preferences = getSharedPreferences("appearance", MODE_PRIVATE)
 
         setContent {
@@ -61,6 +63,7 @@ class MainActivity : ComponentActivity() {
                 GroceriesApp(
                     repository = repository,
                     bioCompanyRepository = bioCompanyRepository,
+                    reweRepository = reweRepository,
                     widthSizeClass = calculateWindowSizeClass(this).widthSizeClass,
                     darkTheme = darkTheme,
                     ocrEngine = ocrEngine,

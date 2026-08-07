@@ -1,20 +1,7 @@
 package com.example.groceriesapp.vision.ocr
 
 import android.content.Context
-import android.net.Uri
 import java.io.File
-import java.io.FileOutputStream
-import java.nio.file.Files
-import java.nio.file.StandardCopyOption
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.ensureActive
-import kotlinx.coroutines.withContext
-
-enum class GlmOcrLiteRtModelPart {
-    VISION,
-    DECODER,
-}
 
 data class GlmOcrLiteRtModelState(
     val visionSizeBytes: Long?,
@@ -45,50 +32,8 @@ class GlmOcrLiteRtModelManager(context: Context) {
     fun requireReady(): GlmOcrLiteRtModelState =
         state().also {
             check(it.ready) {
-                "Install both GLM-OCR LiteRT model files in Settings first."
+                "The GLM-OCR LiteRT model files are not installed on this device."
             }
-        }
-
-    suspend fun import(part: GlmOcrLiteRtModelPart, uri: Uri): GlmOcrLiteRtModelState =
-        withContext(Dispatchers.IO) {
-            check(externalDirectory.mkdirs() || externalDirectory.isDirectory) {
-                "Could not create the LiteRT model directory."
-            }
-            val target = externalDirectory.resolve(
-                when (part) {
-                    GlmOcrLiteRtModelPart.VISION -> VISION_FILE
-                    GlmOcrLiteRtModelPart.DECODER -> DECODER_FILE
-                },
-            )
-            val minimumBytes = when (part) {
-                GlmOcrLiteRtModelPart.VISION -> MIN_VISION_BYTES
-                GlmOcrLiteRtModelPart.DECODER -> MIN_DECODER_BYTES
-            }
-            val temporary = externalDirectory.resolve("${target.name}.importing")
-            try {
-                appContext.contentResolver.openInputStream(uri)?.use { input ->
-                    FileOutputStream(temporary).buffered(COPY_BUFFER_BYTES).use { output ->
-                        val buffer = ByteArray(COPY_BUFFER_BYTES)
-                        while (true) {
-                            currentCoroutineContext().ensureActive()
-                            val count = input.read(buffer)
-                            if (count < 0) break
-                            output.write(buffer, 0, count)
-                        }
-                    }
-                } ?: error("Could not open the selected LiteRT model.")
-                require(temporary.length() >= minimumBytes && hasTfliteHeader(temporary)) {
-                    "The selected file is not the expected GLM-OCR LiteRT model."
-                }
-                Files.move(
-                    temporary.toPath(),
-                    target.toPath(),
-                    StandardCopyOption.REPLACE_EXISTING,
-                )
-            } finally {
-                temporary.delete()
-            }
-            state()
         }
 
     private fun locate(name: String): File =
@@ -104,7 +49,6 @@ class GlmOcrLiteRtModelManager(context: Context) {
         const val DECODER_FILE = "glm_ocr_multimodal_decoder_combined_fp16.tflite"
         private const val MIN_VISION_BYTES = 1_500_000_000L
         private const val MIN_DECODER_BYTES = 1_400_000_000L
-        private const val COPY_BUFFER_BYTES = 1_048_576
     }
 }
 

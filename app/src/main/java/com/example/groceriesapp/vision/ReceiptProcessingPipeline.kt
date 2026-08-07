@@ -101,6 +101,7 @@ class ReceiptProcessingPipeline(
                 .coerceIn(Int.MIN_VALUE.toLong(), Int.MAX_VALUE.toLong())
                 .toInt(),
             category = category,
+            foodConceptId = foodConceptId,
             textRegionId = sourceRegion?.id,
             needsReview = needsReview,
         )

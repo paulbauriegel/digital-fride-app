@@ -9,15 +9,19 @@ import com.example.groceriesapp.data.network.BioCompanyPointsResponse
 import com.example.groceriesapp.data.network.BioCompanyReceiptDetail
 import com.example.groceriesapp.data.network.BioCompanyReceiptEntry
 import com.example.groceriesapp.data.network.BioCompanyReceiptDetailItem
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class BioCompanyRepository(context: Context) {
 
     private val apiClient = BioCompanyApiClient()
+    private val repositoryScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val masterKey = MasterKey.Builder(context)
         .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
         .build()
@@ -69,19 +73,20 @@ class BioCompanyRepository(context: Context) {
     }
 
     init {
-        encryptedPrefs.getString(KEY_EMAIL, null)?.let { email ->
+        if (_account.value == null) {
+            val email = encryptedPrefs.getString(KEY_EMAIL, null)
             val password = encryptedPrefs.getString(KEY_PASSWORD, null)
-            val token = encryptedPrefs.getString(KEY_TOKEN, null)
-            val custNum = encryptedPrefs.getString(KEY_CUSTOMERNUMBER, null)
-            val expiry = encryptedPrefs.getLong(KEY_TOKEN_EXPIRY, 0)
-            if (password != null && token != null && custNum != null && expiry > System.currentTimeMillis()) {
-                apiClient.restoreSession(email, password, token, custNum, expiry)
-                _account.value = apiClient.getAccount()
+            if (email != null && password != null) {
+                repositoryScope.launch { login(email, password, isSilentRefresh = true) }
             }
         }
     }
 
-    suspend fun login(email: String, password: String): Result<Unit> = withContext(Dispatchers.IO) {
+    suspend fun login(
+        email: String,
+        password: String,
+        isSilentRefresh: Boolean = false,
+    ): Result<Unit> = withContext(Dispatchers.IO) {
         _loginState.value = LoginState.LOGGING_IN
         _syncState.value = SyncState.IDLE
         val result = apiClient.login(email, password)
@@ -92,9 +97,16 @@ class BioCompanyRepository(context: Context) {
         } else {
             val error = result.exceptionOrNull() ?: java.lang.Exception("Unknown error")
             apiClient.clearSession()
-            clearCredentials()
             _account.value = null
-            _loginState.value = LoginState.ERROR(error.userFriendlyMessage())
+            if (isSilentRefresh) {
+                // The saved token merely expired; keep the stored credentials so the user
+                // isn't forced to type them in again. A transient network failure here must
+                // not wipe a previously working login.
+                _loginState.value = LoginState.IDLE
+            } else {
+                clearCredentials()
+                _loginState.value = LoginState.ERROR(error.userFriendlyMessage())
+            }
         }
         result.map { }
     }

@@ -17,6 +17,8 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.CardMembership
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Login
+import androidx.compose.material.icons.filled.Receipt
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -87,7 +89,7 @@ private fun ConnectedCard(
     Card(
         modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.3f),
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
         ),
     ) {
         Column(
@@ -174,12 +176,22 @@ private fun ConnectedCard(
                     modifier = Modifier.align(Alignment.CenterHorizontally),
                     strokeWidth = 2.dp,
                 )
-                is BioCompanyRepository.SyncState.SUCCESS -> Text(
-                    "${(syncState as BioCompanyRepository.SyncState.SUCCESS).count} receipts available",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.align(Alignment.CenterHorizontally),
-                )
+                is BioCompanyRepository.SyncState.SUCCESS -> Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(
+                        "${(syncState as BioCompanyRepository.SyncState.SUCCESS).count} receipts available",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Button(onClick = onOpenReceipts) {
+                        Icon(Icons.Default.Receipt, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Review & Import")
+                    }
+                }
                 is BioCompanyRepository.SyncState.ERROR -> {
                     val err = syncState as BioCompanyRepository.SyncState.ERROR
                     Text(

@@ -4,6 +4,7 @@ import okhttp3.HttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
@@ -20,7 +21,7 @@ class BioCompanyApiClient {
         private const val BASE_URL = "https://connect.biocompany.de/"
         // AES-128-CBC: key = REDACTED iv = REDACTED
         private val CIPHER_KEY = ByteArray(16) // removed from the public history, 0x37.toByte(), 0x78.toByte(), 0x21.toByte(),
-            0x41.toByte(), 0x24.toByte(), 0x44.toByte(), 0x2A.toByte(),
+            0x41.toByte(), 0x25.toByte(), 0x44.toByte(), 0x2A.toByte(),
             0x47.toByte(), 0x2D.toByte(), 0x4B.toByte(), 0x61.toByte(),
             0x50.toByte(), 0x64.toByte(), 0x53.toByte(), 0x61.toByte(),
         )
@@ -111,25 +112,32 @@ class BioCompanyApiClient {
             put("customernumber", customerNumber)
         }
         val jsonBody = bodyJson.toString().toRequestBody("application/json".toMediaType())
-        val request = buildAuthRequest("POST", "receipts/detail").newBuilder()
-            .post(jsonBody)
-            .build()
+        val request = buildAuthRequest("POST", "receipts/detail", jsonBody)
         val response = client.newCall(request).execute().use { r ->
             r.body?.string() ?: throw IOException("Empty response")
         }
         val detailJson = JSONObject(response)
         val items = buildList {
-            val itemsArr = detailJson.optJSONArray("positions")
+            val itemsArr = detailJson.optJSONArray("receipts")
+                ?: detailJson.optJSONArray("positions")
                 ?: detailJson.optJSONArray("items")
                 ?: detailJson.optJSONArray("lines")
             if (itemsArr != null) {
                 for (i in 0 until itemsArr.length()) {
                     val itemJson = itemsArr.getJSONObject(i)
                     add(BioCompanyReceiptDetailItem(
-                        name = itemJson.optString("name", itemJson.optString("article", itemJson.optString("bezeichnung", "Unknown"))),
+                        name = itemJson.optString(
+                            "articledescription",
+                            itemJson.optString("name", itemJson.optString("article", itemJson.optString("bezeichnung", "Unknown"))),
+                        ),
                         quantity = itemJson.optDouble("quantity", itemJson.optDouble("qty", 1.0)),
                         unit = itemJson.optString("unit", "").takeIf { it.isNotEmpty() },
-                        priceCents = (itemJson.optDouble("amount", itemJson.optDouble("price", 0.0)) * 100).toInt(),
+                        priceCents = (
+                            itemJson.optDouble(
+                                "unit_price_gross",
+                                itemJson.optDouble("amount", itemJson.optDouble("price", 0.0)),
+                            ) * 100
+                        ).toInt(),
                     ))
                 }
             }
@@ -158,9 +166,7 @@ class BioCompanyApiClient {
         ensureAuth()
         val payload = JSONObject().put("customernumber", customerNumber)
         val jsonBody = payload.toString().toRequestBody("application/json".toMediaType())
-        val request = buildAuthRequest("POST", "card/points").newBuilder()
-            .post(jsonBody)
-            .build()
+        val request = buildAuthRequest("POST", "card/points", jsonBody)
         val json = JSONObject(client.newCall(request).execute().use { r -> r.body?.string() ?: throw IOException("Empty response") })
         BioCompanyPointsResponse(
             customernumber = json.optString("customernumber", null),
@@ -221,11 +227,11 @@ class BioCompanyApiClient {
         }.getOrDefault(System.currentTimeMillis() + 10 * 60 * 1000L)
     }
 
-    private fun buildAuthRequest(method: String, path: String): Request {
+    private fun buildAuthRequest(method: String, path: String, body: RequestBody? = null): Request {
         val url = "$BASE_URL$path"
         return Request.Builder()
             .url(url)
-            .method(method, null)
+            .method(method, body)
             .apply {
                 token?.let { h -> header("Authorization", "Bearer $h") }
             }

@@ -3,8 +3,8 @@ package com.example.groceriesapp.ui
 import android.content.Context
 import android.content.Intent
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -18,6 +18,7 @@ import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -32,6 +33,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -46,9 +48,14 @@ import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.groceriesapp.data.GroceriesRepository
 import com.example.groceriesapp.data.BioCompanyRepository
+import com.example.groceriesapp.data.ReweRepository
 import com.example.groceriesapp.data.network.BioCompanyReceiptDetail
 import com.example.groceriesapp.data.network.BioCompanyReceiptEntry
+import com.example.groceriesapp.data.network.ReweAuthRequest
 import com.example.groceriesapp.feature.biocompany.BioCompanyReceiptsScreen
+import com.example.groceriesapp.feature.rewe.ReweLoginScreen
+import com.example.groceriesapp.feature.rewe.ReweReceiptsScreen
+import kotlinx.coroutines.launch
 import com.example.groceriesapp.feature.inventory.InventoryScreen
 import com.example.groceriesapp.feature.more.MoreScreen
 import com.example.groceriesapp.feature.overview.OverviewScreen
@@ -71,13 +78,14 @@ private enum class TopLevelDestination(
     OVERVIEW("Home", Icons.Default.Home),
     INVENTORY("Inventory", Icons.Default.Inventory2),
     RECEIPTS("Receipts", Icons.AutoMirrored.Filled.ReceiptLong),
-    MORE("More", Icons.Default.Menu),
+    MORE("Settings", Icons.Default.Menu),
 }
 
 @Composable
 fun GroceriesApp(
     repository: GroceriesRepository,
     bioCompanyRepository: BioCompanyRepository,
+    reweRepository: ReweRepository,
     widthSizeClass: WindowWidthSizeClass,
     darkTheme: Boolean,
     ocrEngine: OcrEngine,
@@ -92,6 +100,9 @@ fun GroceriesApp(
     }
     var reviewReceiptId by rememberSaveable { mutableStateOf<String?>(null) }
     var showBioCompanyImport by remember { mutableStateOf(false) }
+    var showReweImport by remember { mutableStateOf(false) }
+    var reweAuthRequest by remember { mutableStateOf<ReweAuthRequest?>(null) }
+    val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val expanded = widthSizeClass != WindowWidthSizeClass.Compact
     val ocrRecognizer = remember(context, ocrEngine) {
@@ -128,11 +139,49 @@ fun GroceriesApp(
     }
 
     if (showBioCompanyImport) {
+        val bioCompanyEntries by bioCompanyRepository.receipts.collectAsStateWithLifecycle()
         BioCompanyReceiptsScreen(
-            entries = bioCompanyRepository.receipts.value,
+            entries = bioCompanyEntries,
             onBack = { showBioCompanyImport = false },
             groceryRepository = repository,
             fetchDetail = { entry -> bioCompanyRepository.fetchReceiptDetail(entry) },
+        )
+        return
+    }
+
+    val activeAuthRequest = reweAuthRequest
+    if (activeAuthRequest != null) {
+        ReweLoginScreen(
+            authRequest = activeAuthRequest,
+            onCancel = {
+                reweAuthRequest = null
+                reweRepository.resetLoginState()
+            },
+            onCodeReceived = { callbackUrl, code ->
+                reweAuthRequest = null
+                scope.launch {
+                    reweRepository.completeLogin(
+                        callbackUrl = callbackUrl,
+                        code = code,
+                        codeVerifier = activeAuthRequest.codeVerifier,
+                    )
+                }
+            },
+            onError = { message ->
+                reweAuthRequest = null
+                reweRepository.failLogin(message)
+            },
+        )
+        return
+    }
+
+    if (showReweImport) {
+        val reweEntries by reweRepository.receipts.collectAsStateWithLifecycle()
+        ReweReceiptsScreen(
+            entries = reweEntries,
+            reweRepository = reweRepository,
+            groceryRepository = repository,
+            onBack = { showReweImport = false },
         )
         return
     }
@@ -205,6 +254,7 @@ fun GroceriesApp(
                     repository = repository,
                     bioCompanyRepository = bioCompanyRepository,
                     receipts = receipts,
+
                     inventory = inventory,
                     darkTheme = darkTheme,
                     ocrEngine = ocrEngine,
@@ -214,6 +264,9 @@ fun GroceriesApp(
                     onDestination = { destination = it },
                     onOpenReceipt = { reviewReceiptId = it },
                     onOpenBioCompanyReceipts = { showBioCompanyImport = true },
+                    reweRepository = reweRepository,
+                    onConnectRewe = { reweAuthRequest = reweRepository.createAuthRequest() },
+                    onOpenReweReceipts = { showReweImport = true },
                     modifier = Modifier
                         .widthIn(max = 1_040.dp)
                         .fillMaxSize(),
@@ -226,7 +279,25 @@ fun GroceriesApp(
             bottomBar = {
                 NavigationBar {
                     TopLevelDestination.entries.forEachIndexed { index, item ->
-                        if (index == 2) Spacer(Modifier.size(72.dp))
+                        if (index == 2) {
+                            Box(
+                                modifier = Modifier.size(72.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                FloatingActionButton(
+                                    onClick = ::beginScan,
+                                    shape = CircleShape,
+                                    containerColor = MaterialTheme.colorScheme.primary,
+                                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                                    elevation = FloatingActionButtonDefaults.elevation(
+                                        defaultElevation = 0.dp,
+                                    ),
+                                    modifier = Modifier.size(52.dp),
+                                ) {
+                                    Icon(Icons.Default.Add, contentDescription = "Scan receipt")
+                                }
+                            }
+                        }
                         NavigationBarItem(
                             selected = destination == item,
                             onClick = { destination = item },
@@ -236,18 +307,13 @@ fun GroceriesApp(
                     }
                 }
             },
-            floatingActionButton = {
-                FloatingActionButton(onClick = ::beginScan) {
-                    Icon(Icons.Default.Add, contentDescription = "Scan receipt")
-                }
-            },
-            floatingActionButtonPosition = androidx.compose.material3.FabPosition.Center,
         ) { innerPadding ->
                 TopLevelContent(
                     destination = destination,
                     repository = repository,
                     bioCompanyRepository = bioCompanyRepository,
                     receipts = receipts,
+
                     inventory = inventory,
                     darkTheme = darkTheme,
                     ocrEngine = ocrEngine,
@@ -257,6 +323,9 @@ fun GroceriesApp(
                     onDestination = { destination = it },
                     onOpenReceipt = { reviewReceiptId = it },
                     onOpenBioCompanyReceipts = { showBioCompanyImport = true },
+                    reweRepository = reweRepository,
+                    onConnectRewe = { reweAuthRequest = reweRepository.createAuthRequest() },
+                    onOpenReweReceipts = { showReweImport = true },
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(innerPadding),
@@ -288,6 +357,9 @@ private fun TopLevelContent(
     onDestination: (TopLevelDestination) -> Unit,
     onOpenReceipt: (String) -> Unit,
     onOpenBioCompanyReceipts: () -> Unit,
+    reweRepository: ReweRepository,
+    onConnectRewe: () -> Unit,
+    onOpenReweReceipts: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Box(modifier) {
@@ -305,12 +377,14 @@ private fun TopLevelContent(
                 inventory = inventory,
                 onAddItem = repository::addInventoryItem,
                 onRemoveItem = repository::removeInventoryItem,
+                onMarkOpened = repository::markInventoryItemOpened,
                 modifier = Modifier.fillMaxSize(),
             )
             TopLevelDestination.RECEIPTS -> ReceiptsScreen(
                 receipts = receipts,
                 onScanReceipt = onScan,
                 onOpenReceipt = onOpenReceipt,
+                onImportReceipt = onOpenBioCompanyReceipts,
                 modifier = Modifier.fillMaxSize(),
             )
             TopLevelDestination.MORE -> MoreScreen(
@@ -318,10 +392,11 @@ private fun TopLevelContent(
                 onDarkThemeChanged = onDarkThemeChanged,
                 ocrEngine = ocrEngine,
                 onOcrEngineChanged = onOcrEngineChanged,
-                receiptCount = receipts.size,
-                inventoryCount = inventory.size,
                 bioCompanyRepo = bioCompanyRepository,
                 onOpenBioCompanyReceipts = onOpenBioCompanyReceipts,
+                reweRepo = reweRepository,
+                onConnectRewe = onConnectRewe,
+                onOpenReweReceipts = onOpenReweReceipts,
                 modifier = Modifier.fillMaxSize(),
             )
         }

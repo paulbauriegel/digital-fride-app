@@ -1,5 +1,6 @@
 package com.example.groceriesapp.vision.parsing
 
+import com.example.groceriesapp.data.taxonomy.GroceryCategory
 import java.time.ZoneOffset
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -31,7 +32,8 @@ class ReceiptParserTest {
         assertNotNull(result.purchasedAtEpochMillis)
         assertEquals(642L, result.totalCents)
         assertEquals(3, result.items.size)
-        assertEquals("Dairy", result.items[0].category)
+        assertEquals(GroceryCategory.DAIRY.name, result.items[0].category)
+        assertEquals("WHOLE_MILK", result.items[0].foodConceptId)
         assertEquals(1.2, result.items[1].quantity, 0.001)
         assertEquals("kg", result.items[1].unit)
         assertFalse(result.items.any { it.name.contains("Pfand", ignoreCase = true) })

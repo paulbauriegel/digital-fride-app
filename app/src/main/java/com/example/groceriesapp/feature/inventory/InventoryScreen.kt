@@ -1,20 +1,25 @@
 package com.example.groceriesapp.feature.inventory
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Inventory2
+import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -26,6 +31,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -39,22 +45,18 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.example.groceriesapp.data.InventoryItem
+import com.example.groceriesapp.data.taxonomy.FoodConceptCatalog
+import com.example.groceriesapp.data.taxonomy.GroceryCategory
+import com.example.groceriesapp.data.taxonomy.resolveCategory
+import com.example.groceriesapp.data.taxonomy.resolveIconRes
 import com.example.groceriesapp.ui.components.EmptyStateCard
+import com.example.groceriesapp.ui.formatExpiry
 import com.example.groceriesapp.ui.theme.spacing
-
-private val InventoryCategories = listOf(
-    "Fruit",
-    "Vegetables",
-    "Dairy",
-    "Meat & Fish",
-    "Bakery",
-    "Pantry",
-    "Drinks",
-    "Other",
-)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -62,15 +64,16 @@ fun InventoryScreen(
     inventory: List<InventoryItem>,
     onAddItem: (InventoryItem) -> Unit,
     onRemoveItem: (String) -> Unit,
+    onMarkOpened: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var query by rememberSaveable { mutableStateOf("") }
-    var category by rememberSaveable { mutableStateOf<String?>(null) }
+    var category by rememberSaveable { mutableStateOf<GroceryCategory?>(null) }
     var showAddDialog by rememberSaveable { mutableStateOf(false) }
     val filtered = remember(inventory, query, category) {
         inventory.filter { item ->
             (query.isBlank() || item.name.contains(query, ignoreCase = true)) &&
-                (category == null || item.category == category)
+                (category == null || resolveCategory(item.category, item.name) == category)
         }
     }
 
@@ -95,9 +98,29 @@ fun InventoryScreen(
             OutlinedTextField(
                 value = query,
                 onValueChange = { query = it },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                label = { Text("Search your fridge") },
+                leadingIcon = {
+                    Icon(
+                        Icons.Default.Search,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                },
+                trailingIcon = {
+                    if (query.isNotEmpty()) {
+                        IconButton(onClick = { query = "" }) {
+                            Icon(Icons.Default.Close, contentDescription = "Clear search")
+                        }
+                    }
+                },
+                placeholder = { Text("Search your fridge") },
                 singleLine = true,
+                shape = RoundedCornerShape(percent = 50),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = Color.Transparent,
+                    unfocusedBorderColor = Color.Transparent,
+                    focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                ),
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = MaterialTheme.spacing.medium),
@@ -116,11 +139,11 @@ fun InventoryScreen(
                         label = { Text("All") },
                     )
                 }
-                items(InventoryCategories) { option ->
+                items(GroceryCategory.entries) { option ->
                     FilterChip(
                         selected = category == option,
                         onClick = { category = if (category == option) null else option },
-                        label = { Text(option) },
+                        label = { Text(option.displayName) },
                     )
                 }
             }
@@ -164,7 +187,11 @@ fun InventoryScreen(
                         )
                     }
                     items(filtered, key = InventoryItem::id) { item ->
-                        InventoryRow(item = item, onRemove = { onRemoveItem(item.id) })
+                        InventoryRow(
+                            item = item,
+                            onRemove = { onRemoveItem(item.id) },
+                            onMarkOpened = { onMarkOpened(item.id) },
+                        )
                     }
                 }
             }
@@ -186,6 +213,7 @@ fun InventoryScreen(
 private fun InventoryRow(
     item: InventoryItem,
     onRemove: () -> Unit,
+    onMarkOpened: () -> Unit,
 ) {
     Card(
         colors = CardDefaults.cardColors(
@@ -203,10 +231,14 @@ private fun InventoryRow(
                 shape = CircleShape,
                 color = MaterialTheme.colorScheme.secondaryContainer,
             ) {
-                Text(
-                    text = categoryEmoji(item.category),
-                    modifier = Modifier.padding(12.dp),
-                    style = MaterialTheme.typography.titleLarge,
+                Image(
+                    painter = painterResource(
+                        resolveIconRes(item.foodConceptId, item.category, item.name),
+                    ),
+                    contentDescription = null,
+                    modifier = Modifier
+                        .padding(8.dp)
+                        .size(32.dp),
                 )
             }
             Column(modifier = Modifier.weight(1f)) {
@@ -215,16 +247,26 @@ private fun InventoryRow(
                     text = buildString {
                         append(formatQuantity(item.quantity))
                         item.unit?.takeIf(String::isNotBlank)?.let { append(" $it") }
-                        item.category?.let { append(" • $it") }
+                        append(" • ")
+                        append(resolveCategory(item.category, item.name).displayName)
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                if (item.expiresAtEpochMillis == null) {
-                    Text(
-                        "Expiry unknown",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                Text(
+                    text = buildString {
+                        append(formatExpiry(item))
+                        if (item.openedAtEpochMillis != null) append(" • opened")
+                    },
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (item.openedAtEpochMillis == null) {
+                IconButton(onClick = onMarkOpened) {
+                    Icon(
+                        Icons.Default.LockOpen,
+                        contentDescription = "Mark ${item.name} as opened",
                     )
                 }
             }
@@ -243,7 +285,10 @@ private fun AddInventoryItemDialog(
     var name by rememberSaveable { mutableStateOf("") }
     var quantity by rememberSaveable { mutableStateOf("1") }
     var unit by rememberSaveable { mutableStateOf("pc") }
-    var category by rememberSaveable { mutableStateOf("Other") }
+    // Derived from the name until the user picks a chip, so typing "Vollmilch" lands in Dairy.
+    var chosenCategory by rememberSaveable { mutableStateOf<GroceryCategory?>(null) }
+    val concept = remember(name) { FoodConceptCatalog.match(name) }
+    val category = chosenCategory ?: concept?.category ?: GroceryCategory.OTHER
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -279,16 +324,17 @@ private fun AddInventoryItemDialog(
                 }
                 Text("Category", style = MaterialTheme.typography.labelLarge)
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small)) {
-                    items(InventoryCategories) { option ->
+                    items(GroceryCategory.entries) { option ->
                         FilterChip(
                             selected = category == option,
-                            onClick = { category = option },
-                            label = { Text(option) },
+                            onClick = { chosenCategory = option },
+                            label = { Text(option.displayName) },
                         )
                     }
                 }
                 Text(
-                    "Expiry is left unknown until you set it. The app does not guess food safety dates.",
+                    "Expiry is estimated from typical storage times, not from the packaging. " +
+                        "Always check the printed date.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -304,7 +350,8 @@ private fun AddInventoryItemDialog(
                             name = name.trim(),
                             quantity = quantity.replace(',', '.').toDouble(),
                             unit = unit.trim().ifBlank { null },
-                            category = category,
+                            category = category.name,
+                            foodConceptId = concept?.id.takeIf { category == concept?.category },
                         ),
                     )
                 },
@@ -322,14 +369,3 @@ private fun AddInventoryItemDialog(
 
 private fun formatQuantity(value: Double): String =
     if (value % 1.0 == 0.0) value.toInt().toString() else "%.2f".format(value)
-
-private fun categoryEmoji(category: String?): String = when (category) {
-    "Fruit" -> "🍎"
-    "Vegetables" -> "🥦"
-    "Dairy" -> "🥛"
-    "Meat & Fish" -> "🐟"
-    "Bakery" -> "🥖"
-    "Pantry" -> "🥫"
-    "Drinks" -> "🧃"
-    else -> "🛒"
-}
