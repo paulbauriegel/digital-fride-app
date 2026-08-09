@@ -34,11 +34,13 @@ enum class GroceryCategory(
     SPICES_BAKING("Spices & Baking", R.drawable.ic_category_spices_baking, "🧂"),
     PANTRY("Pantry", R.drawable.ic_category_pantry, "🧺", setOf("Pantry")),
     HOUSEHOLD("Household", R.drawable.ic_category_household, "🧼"),
+    /** Bottle/container deposits (Pfand) — a fee, not a grocery, so it never expires or spoils. */
+    DEPOSIT("Deposit", R.drawable.ic_food_pfand, "♻️"),
     OTHER("Other", R.drawable.ic_category_other, "🛒", setOf("Other"));
 
     /** Expiry estimation is meaningless for these, so no shelf-life rule is ever applied. */
     val supportsExpiry: Boolean
-        get() = this != HOUSEHOLD && this != OTHER
+        get() = this != HOUSEHOLD && this != DEPOSIT && this != OTHER
 
     companion object {
         /**

@@ -5,6 +5,7 @@ import com.example.groceriesapp.data.taxonomy.ExpirySource
 import java.text.NumberFormat
 import java.time.Instant
 import java.time.LocalDate
+import java.time.LocalTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
@@ -23,14 +24,25 @@ fun formatCurrency(cents: Int?, currencyCode: String = "EUR"): String {
     return symbol + amount.format(cents / 100.0)
 }
 
-/** Compact row timestamp, e.g. `May 26, 08:35`. */
-fun formatReceiptTimestamp(epochMillis: Long): String =
-    Instant.ofEpochMilli(epochMillis)
+/**
+ * Compact row timestamp, e.g. `May 26, 08:35` — or just `May 26` when the receipt carries no time
+ * of day. BIO COMPANY's API and the OCR date parser both yield a bare date, which lands on local
+ * midnight; printing `00:00` for those would invent a checkout time the app was never told.
+ * A null [dateEpochMillis] falls back to [createdAtEpochMillis], whose time is the real scan or
+ * import moment and is kept.
+ */
+fun formatReceiptTimestamp(dateEpochMillis: Long?, createdAtEpochMillis: Long): String {
+    val zoned = Instant.ofEpochMilli(dateEpochMillis ?: createdAtEpochMillis)
         .atZone(ZoneId.systemDefault())
-        .format(RECEIPT_TIMESTAMP_FORMAT)
+    val dateOnly = dateEpochMillis != null && zoned.toLocalTime() == LocalTime.MIDNIGHT
+    return zoned.format(if (dateOnly) RECEIPT_DATE_FORMAT else RECEIPT_TIMESTAMP_FORMAT)
+}
 
 private val RECEIPT_TIMESTAMP_FORMAT: DateTimeFormatter =
     DateTimeFormatter.ofPattern("MMM d, HH:mm", Locale.ENGLISH)
+
+private val RECEIPT_DATE_FORMAT: DateTimeFormatter =
+    DateTimeFormatter.ofPattern("MMM d", Locale.ENGLISH)
 
 fun formatDate(epochMillis: Long?): String {
     if (epochMillis == null) return "Date not recognized"

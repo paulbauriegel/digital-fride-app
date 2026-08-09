@@ -125,6 +125,7 @@ class BioCompanyRepository(context: Context) {
     suspend fun fetchReceipts(): Result<List<BioCompanyReceiptEntry>> = withContext(Dispatchers.IO) {
         _syncState.value = SyncState.FETCHING
         return@withContext apiClient.getReceipts()
+            .map { entries -> entries.sortedWith(RECENT_FIRST) }
             .onSuccess { entries ->
                 _receipts.value = entries
                 _syncState.value = SyncState.SUCCESS(entries.size)
@@ -204,6 +205,15 @@ class BioCompanyRepository(context: Context) {
     }
 
     companion object {
+        /**
+         * Newest receipt first. The API's date is ISO-8601 ("yyyy-MM-dd'T'HH:mm:ss"), which sorts
+         * chronologically as a string; a missing date is "" and lands at the end. Same-timestamp
+         * entries fall back to the receipt number, which also grows over time.
+         */
+        private val RECENT_FIRST: Comparator<BioCompanyReceiptEntry> =
+            compareByDescending<BioCompanyReceiptEntry> { it.date }
+                .thenByDescending { it.receiptnumber }
+
         private const val KEY_EMAIL = "email"
         private const val KEY_PASSWORD = "password"
         private const val KEY_TOKEN = "token"
@@ -211,3 +221,22 @@ class BioCompanyRepository(context: Context) {
         private const val KEY_TOKEN_EXPIRY = "tokenExpiry"
     }
 }
+
+/**
+ * Adjustment lines the detail API mixes into a receipt's items — a "10% Bonus" loyalty discount,
+ * for example — carry no type field of their own to tell them apart from real products. The one
+ * marker they do carry is a negative `quantity` (observed as -1), which a purchased product can
+ * never have, so it's what [ReceiptItem] itself rejects via its `quantity > 0.0` requirement.
+ * Filtering them out here, rather than clamping the value to something positive, keeps them from
+ * being imported as a phantom grocery item.
+ */
+fun List<BioCompanyReceiptDetailItem>.toReceiptItems(): List<ReceiptItem> = this
+    .filter { it.quantity > 0.0 }
+    .map { item ->
+        ReceiptItem(
+            name = item.name,
+            quantity = item.quantity,
+            unit = item.unit,
+            priceCents = item.priceCents,
+        )
+    }

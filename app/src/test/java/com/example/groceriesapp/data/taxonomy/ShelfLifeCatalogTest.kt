@@ -108,6 +108,27 @@ class ShelfLifeCatalogTest {
         )
     }
 
+    /**
+     * Plant drinks are sold UHT-sterilised like H-Milch: unopened they sit in the pantry for
+     * months, and only the opened window is short. FoodKeeper's soy-milk entry covers just the
+     * opened side, so the unopened window must come from the same shelf-stable estimate as HMILCH.
+     */
+    @Test
+    fun plantDrinkKeepsLikeUhtMilkWhileUnopened() {
+        val plant = bundled["PLANT_MILK"]
+        assertNotNull(plant)
+        val unopened = plant?.pantryDays ?: plant?.unopenedFridgeDays
+        assertNotNull("PLANT_MILK has no unopened window at all", unopened)
+        assertEquals("PLANT_MILK should track HMILCH", bundled["HMILCH"]?.pantryDays, unopened)
+        val freshMilkFallback = ShelfLifeCatalog.CATEGORY_FALLBACKS.getValue(GroceryCategory.DAIRY)
+            .unopenedFridgeDays!!
+        assertTrue(
+            "Plant drink (${unopened!!.first} days) should far outlast fresh milk " +
+                "(${freshMilkFallback.first} days)",
+            unopened.first > freshMilkFallback.last * 3,
+        )
+    }
+
     /** Milchreis is sold as dry rice grains, so it should keep like rice, not like fresh milk. */
     @Test
     fun milchreisKeepsLikeDryRiceNotLikeFreshMilk() {

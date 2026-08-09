@@ -1,6 +1,7 @@
 package com.example.groceriesapp.feature.rewe
 
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,7 +16,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.NotInterested
@@ -84,7 +85,7 @@ fun ReweReceiptsScreen(
                 title = { Text("Import REWE Receipts") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
             )
@@ -248,9 +249,16 @@ private fun ReceiptRow(
     onToggle: () -> Unit,
 ) {
     Card(
+        // toggleable rather than clickable: selection is otherwise carried only by a trailing icon,
+        // so TalkBack had no way to announce whether a row was picked.
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(enabled = !alreadyImported, onClick = onToggle),
+            .toggleable(
+                value = selected,
+                enabled = !alreadyImported,
+                role = Role.Checkbox,
+                onValueChange = { onToggle() },
+            ),
         colors = CardDefaults.cardColors(
             containerColor = when {
                 selected -> MaterialTheme.colorScheme.secondaryContainer
@@ -295,7 +303,7 @@ private fun ReceiptRow(
             when {
                 alreadyImported -> Icon(
                     Icons.Default.CheckCircle,
-                    contentDescription = null,
+                    contentDescription = "Already imported",
                     tint = MaterialTheme.colorScheme.primary,
                 )
                 selected -> Icon(
@@ -306,7 +314,7 @@ private fun ReceiptRow(
                 else -> Icon(
                     Icons.Default.NotInterested,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }

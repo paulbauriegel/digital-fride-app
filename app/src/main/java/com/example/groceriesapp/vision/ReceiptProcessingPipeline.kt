@@ -10,22 +10,22 @@ import com.example.groceriesapp.vision.ocr.MlKitReceiptOcrRecognizer
 import com.example.groceriesapp.vision.ocr.ReceiptOcrInput
 import com.example.groceriesapp.vision.ocr.ReceiptOcrRecognizer
 import com.example.groceriesapp.vision.parsing.ParsedLineItem
-import com.example.groceriesapp.vision.parsing.ReceiptParser
+import com.example.groceriesapp.vision.parsing.ReceiptItemExtractor
+import com.example.groceriesapp.vision.parsing.RulesReceiptItemExtractor
 import com.example.groceriesapp.vision.stitching.PlanarReceiptStitcher
 import java.io.File
 import kotlin.math.roundToInt
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 
 class ReceiptProcessingPipeline(
     private val repository: GroceriesRepository,
     private val stitcher: PlanarReceiptStitcher = PlanarReceiptStitcher(),
-    private val parser: ReceiptParser = ReceiptParser(),
+    private val itemExtractor: ReceiptItemExtractor = RulesReceiptItemExtractor(),
     private val ocrRecognizer: ReceiptOcrRecognizer = MlKitReceiptOcrRecognizer(),
 ) {
     suspend fun process(
         session: ScanSession,
         framePaths: List<String>,
+        onPreviewReady: (String) -> Unit = {},
         onProgress: (ProcessingStage, Float) -> Unit,
     ): DigitalReceipt {
         require(framePaths.isNotEmpty()) { "No receipt keyframes were captured" }
@@ -36,6 +36,7 @@ class ReceiptProcessingPipeline(
             outputDirectory = outputDirectory,
             onProgress = { onProgress(ProcessingStage.STITCHING, it) },
         )
+        onPreviewReady(artifact.previewPath)
 
         onProgress(ProcessingStage.RECOGNIZING_TEXT, 0f)
         val ocr = ocrRecognizer.recognize(
@@ -47,7 +48,7 @@ class ReceiptProcessingPipeline(
         onProgress(ProcessingStage.RECOGNIZING_TEXT, 1f)
 
         onProgress(ProcessingStage.PARSING_ITEMS, 0.25f)
-        val parsed = withContext(Dispatchers.Default) { parser.parse(ocr.rawText) }
+        val parsed = itemExtractor.extract(ocr.rawText)
         val regions = ocr.regions.map { region ->
             ReceiptTextRegion(
                 text = region.text,

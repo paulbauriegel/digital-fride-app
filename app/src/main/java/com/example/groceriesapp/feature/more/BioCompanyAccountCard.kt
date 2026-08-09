@@ -1,6 +1,5 @@
 package com.example.groceriesapp.feature.more
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -9,6 +8,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CloudCircle
 import androidx.compose.material.icons.filled.CloudDownload
@@ -18,11 +19,14 @@ import androidx.compose.material.icons.filled.CardMembership
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Login
 import androidx.compose.material.icons.filled.Receipt
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -34,15 +38,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.example.groceriesapp.data.BioCompanyRepository
-import com.example.groceriesapp.data.GroceriesRepository
-import com.example.groceriesapp.data.ReceiptItem
 import com.example.groceriesapp.data.network.BioCompanyAccount
 import com.example.groceriesapp.data.network.BioCompanyPointsResponse
-import com.example.groceriesapp.data.network.BioCompanyReceiptEntry
-import com.example.groceriesapp.data.network.BioCompanyReceiptDetail
 import com.example.groceriesapp.ui.theme.spacing
 
 @Composable
@@ -151,7 +156,7 @@ private fun ConnectedCard(
                         else -> Icons.Default.CloudCircle
                     }
                     Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(4.dp))
+                    Spacer(Modifier.width(MaterialTheme.spacing.extraSmall))
                     Text(
                         when (syncState) {
                             is BioCompanyRepository.SyncState.FETCHING -> "Fetching..."
@@ -166,7 +171,7 @@ private fun ConnectedCard(
                     modifier = Modifier.weight(1f),
                 ) {
                     Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.error)
-                    Spacer(Modifier.width(4.dp))
+                    Spacer(Modifier.width(MaterialTheme.spacing.extraSmall))
                     Text("Disconnect", color = MaterialTheme.colorScheme.error)
                 }
             }
@@ -188,7 +193,7 @@ private fun ConnectedCard(
                     )
                     Button(onClick = onOpenReceipts) {
                         Icon(Icons.Default.Receipt, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(4.dp))
+                        Spacer(Modifier.width(MaterialTheme.spacing.extraSmall))
                         Text("Review & Import")
                     }
                 }
@@ -215,6 +220,16 @@ private fun LoginCard(
 ) {
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
+    var passwordVisible by remember { mutableStateOf(false) }
+    val focusManager = LocalFocusManager.current
+
+    val loggingIn = loginState is BioCompanyRepository.LoginState.LOGGING_IN
+    val loginError = (loginState as? BioCompanyRepository.LoginState.ERROR)?.message
+    val canSubmit = email.isNotBlank() && password.isNotBlank() && !loggingIn
+    // Shared by the IME "Done" action and the Connect button so both honour the same guard.
+    fun submit() {
+        if (canSubmit) onLogin(email, password)
+    }
 
     Card(
         modifier = modifier.fillMaxWidth(),
@@ -254,17 +269,60 @@ private fun LoginCard(
                 label = { Text("Email") },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
-                enabled = loginState !is BioCompanyRepository.LoginState.LOGGING_IN,
+                enabled = !loggingIn,
+                isError = loginError != null,
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Email,
+                    imeAction = ImeAction.Next,
+                    autoCorrectEnabled = false,
+                ),
+                keyboardActions = KeyboardActions(
+                    onNext = { focusManager.moveFocus(FocusDirection.Down) },
+                ),
             )
 
             OutlinedTextField(
                 value = password,
                 onValueChange = { password = it },
                 label = { Text("Password") },
-                visualTransformation = PasswordVisualTransformation(),
+                visualTransformation = if (passwordVisible) {
+                    VisualTransformation.None
+                } else {
+                    PasswordVisualTransformation()
+                },
+                trailingIcon = {
+                    // Nothing to reveal on an empty field.
+                    if (password.isNotEmpty()) {
+                        IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                            Icon(
+                                if (passwordVisible) {
+                                    Icons.Default.VisibilityOff
+                                } else {
+                                    Icons.Default.Visibility
+                                },
+                                contentDescription = if (passwordVisible) {
+                                    "Hide password"
+                                } else {
+                                    "Show password"
+                                },
+                            )
+                        }
+                    }
+                },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
-                enabled = loginState !is BioCompanyRepository.LoginState.LOGGING_IN,
+                enabled = !loggingIn,
+                isError = loginError != null,
+                // The failure belongs to the credential pair, so it is surfaced on the field the
+                // user edits last rather than as loose text next to the button.
+                supportingText = loginError?.let { message ->
+                    { Text(message, color = MaterialTheme.colorScheme.error) }
+                },
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Password,
+                    imeAction = ImeAction.Done,
+                ),
+                keyboardActions = KeyboardActions(onDone = { submit() }),
             )
 
             Row(
@@ -272,31 +330,19 @@ private fun LoginCard(
                 horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                when (loginState) {
-                    is BioCompanyRepository.LoginState.LOGGING_IN -> {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(20.dp),
-                            strokeWidth = 2.dp,
-                        )
-                    }
-                    is BioCompanyRepository.LoginState.ERROR -> {
-                        val err = loginState as BioCompanyRepository.LoginState.ERROR
-                        Text(
-                            err.message,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error,
-                        )
-                        Spacer(Modifier.width(8.dp))
-                    }
-                    else -> Unit
+                if (loggingIn) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        strokeWidth = 2.dp,
+                    )
+                    Spacer(Modifier.width(MaterialTheme.spacing.small))
                 }
                 androidx.compose.material3.Button(
-                    onClick = { onLogin(email, password) },
-                    enabled = email.isNotBlank() && password.isNotBlank() &&
-                        loginState !is BioCompanyRepository.LoginState.LOGGING_IN,
+                    onClick = { submit() },
+                    enabled = canSubmit,
                 ) {
                     Icon(Icons.Default.Login, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(4.dp))
+                    Spacer(Modifier.width(MaterialTheme.spacing.extraSmall))
                     Text("Connect")
                 }
             }

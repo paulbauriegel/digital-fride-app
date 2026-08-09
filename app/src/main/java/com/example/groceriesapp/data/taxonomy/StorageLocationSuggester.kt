@@ -29,6 +29,7 @@ object StorageLocationSuggester {
         GroceryCategory.SPICES_BAKING to StorageLocation.PANTRY,
         GroceryCategory.PANTRY to StorageLocation.PANTRY,
         GroceryCategory.HOUSEHOLD to StorageLocation.PANTRY,
+        GroceryCategory.DEPOSIT to StorageLocation.PANTRY,
         GroceryCategory.OTHER to StorageLocation.PANTRY,
     )
 

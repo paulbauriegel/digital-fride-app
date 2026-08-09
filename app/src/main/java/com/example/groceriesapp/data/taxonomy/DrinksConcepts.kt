@@ -24,7 +24,13 @@ internal val drinksConcepts: List<FoodConcept> = listOf(
         category = GroceryCategory.DRINKS,
         displayName = "Soft drink",
         iconRes = R.drawable.ic_food_soft_drink,
-        keywords = listOf("cola", "limonade", "limo", "fanta", "sprite"),
+        // "bionade" is a branded organic lemonade — the name itself doesn't say "limonade".
+        keywords = listOf(
+            "cola", "limonade", "limo", "fanta", "sprite", "bionade",
+            // Fassbrause, spelled out and truncated, plus the "KROM FB ZIT NAT" receipt line
+            // where "FB" is all that survives of the word.
+            "fassbrause", "fassbra", "krom fb",
+        ),
     ),
     FoodConcept(
         id = "COFFEE",
@@ -39,7 +45,7 @@ internal val drinksConcepts: List<FoodConcept> = listOf(
         category = GroceryCategory.DRINKS,
         displayName = "Tea",
         iconRes = R.drawable.ic_food_tea,
-        keywords = listOf("tee", "chai"),
+        keywords = listOf("tee", "chai", "yogi tea"),
     ),
     FoodConcept(
         id = "BEER",
@@ -53,7 +59,9 @@ internal val drinksConcepts: List<FoodConcept> = listOf(
         category = GroceryCategory.DRINKS,
         displayName = "Ginger beer",
         iconRes = R.drawable.ic_food_ginger_beer,
-        keywords = listOf("ginger beer", "ginger-beer", "gingerbeer"),
+        // "bundaberg" catches the brand alone, since receipts often drop "ginger beer" itself
+        // (e.g. "Bundaberg Ginger").
+        keywords = listOf("ginger beer", "ginger-beer", "gingerbeer", "bundaberg"),
     ),
     FoodConcept(
         id = "WINE",

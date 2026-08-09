@@ -46,6 +46,42 @@ class ConsumptionLogTest {
     }
 
     @Test
+    fun cookedEventWithRecipeRoundTrips() {
+        val event = ConsumptionEvent(
+            itemId = "item-3",
+            name = "Spinat",
+            foodConceptId = "SPINACH",
+            quantity = 150.0,
+            unit = "g",
+            reason = ConsumptionReason.COOKED,
+            recipeId = "spinach_feta_pasta",
+            recipeTitle = "Spinach & Feta Pasta",
+            removedAtEpochMillis = 1_700_000_000_000L,
+        )
+
+        val restored = event.toJson().toConsumptionEventOrNull()
+
+        assertEquals(event, restored)
+        assertEquals("spinach_feta_pasta", restored?.recipeId)
+    }
+
+    @Test
+    fun eventWithoutRecipeFieldsStillParses() {
+        // Entries written by builds that predate the cooked flow have no recipe keys at all.
+        val restored = JSONObject()
+            .put("id", "legacy")
+            .put("itemId", "item-4")
+            .put("name", "Milch")
+            .put("reason", ConsumptionReason.USED_UP.name)
+            .put("removedAtEpochMillis", 1L)
+            .toConsumptionEventOrNull()
+
+        assertEquals("legacy", restored?.id)
+        assertNull(restored?.recipeId)
+        assertNull(restored?.recipeTitle)
+    }
+
+    @Test
     fun malformedEntriesAreSkippedNotFatal() {
         assertNull(JSONObject().toConsumptionEventOrNull())
         assertNull(

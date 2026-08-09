@@ -1,7 +1,5 @@
 package com.example.groceriesapp.feature.receipts
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -9,49 +7,57 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.FilterList
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.Button
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import com.example.groceriesapp.data.DigitalReceipt
 import com.example.groceriesapp.data.ReceiptSource
+import com.example.groceriesapp.data.insights.InsightsAggregator
 import com.example.groceriesapp.ui.components.EmptyStateCard
+import com.example.groceriesapp.ui.components.GroceriesSearchBar
 import com.example.groceriesapp.ui.components.MerchantBadge
+import com.example.groceriesapp.ui.components.rememberGroceriesSearchState
 import com.example.groceriesapp.ui.formatCurrency
 import com.example.groceriesapp.ui.formatReceiptTimestamp
 import com.example.groceriesapp.ui.theme.spacing
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
+import kotlinx.coroutines.launch
 
 private enum class ReceiptFilter(val label: String) {
     ALL("All receipts"),
@@ -64,49 +70,64 @@ private enum class ReceiptFilter(val label: String) {
 @Composable
 fun ReceiptsScreen(
     receipts: List<DigitalReceipt>,
+    bioCompanyConnected: Boolean,
+    reweConnected: Boolean,
     onScanReceipt: () -> Unit,
     onOpenReceipt: (String) -> Unit,
-    onImportReceipt: () -> Unit,
+    onImportBioCompany: () -> Unit,
+    onImportRewe: () -> Unit,
+    onOpenStoreSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var query by rememberSaveable { mutableStateOf("") }
-    var searchOpen by rememberSaveable { mutableStateOf(false) }
+    val searchState = rememberGroceriesSearchState()
+    val searchScope = rememberCoroutineScope()
     var filter by rememberSaveable { mutableStateOf(ReceiptFilter.ALL) }
     var filterMenuOpen by remember { mutableStateOf(false) }
+    var addSheetOpen by rememberSaveable { mutableStateOf(false) }
 
-    val filtered = remember(receipts, query, filter) {
-        receipts
-            .filter { receipt -> filter.matches(receipt) }
-            .filter { receipt ->
-                query.isBlank() ||
-                    receipt.merchant?.contains(query, ignoreCase = true) == true ||
-                    receipt.rawText.contains(query, ignoreCase = true) ||
-                    receipt.items.any { item -> item.name.contains(query, ignoreCase = true) }
-            }
+    // A rolling 30-day window rather than the calendar month: on the 2nd of a month a
+    // month-to-date total says almost nothing about how much is being spent.
+    val spendSummary = remember(receipts) {
+        InsightsAggregator().rollingSpendSummary(receipts, LocalDate.now())
+    }
+
+    // The dropdown filter drives the main list; the query only ever narrows the search view, so
+    // the two are computed separately rather than the list filtering itself behind the overlay.
+    val filtered = remember(receipts, filter) {
+        receipts.filter { receipt -> filter.matches(receipt) }
     }
     val sections = remember(filtered) { groupByRecency(filtered) }
 
+    val searchQuery = searchState.query
+    val searchResults = remember(filtered, searchQuery) {
+        if (searchQuery.isBlank()) {
+            emptyList()
+        } else {
+            filtered.filter { receipt ->
+                receipt.merchant?.contains(searchQuery, ignoreCase = true) == true ||
+                    receipt.rawText.contains(searchQuery, ignoreCase = true) ||
+                    receipt.items.any { item -> item.name.contains(searchQuery, ignoreCase = true) }
+            }
+        }
+    }
+
+    // Pinned rather than collapsing: the bar carries the search/filter actions, so it
+    // stays put and only picks up the scrolled container colour that marks the boundary.
+    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
     Scaffold(
-        modifier = modifier,
+        modifier = modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
             TopAppBar(
                 title = { Text("Receipts") },
+                scrollBehavior = scrollBehavior,
                 actions = {
-                    IconButton(
-                        onClick = {
-                            searchOpen = !searchOpen
-                            if (!searchOpen) query = ""
-                        },
-                    ) {
-                        Icon(
-                            if (searchOpen) Icons.Default.Close else Icons.Default.Search,
-                            contentDescription = if (searchOpen) "Close search" else "Search receipts",
-                        )
+                    IconButton(onClick = { searchScope.launch { searchState.expand() } }) {
+                        Icon(Icons.Default.Search, contentDescription = "Search receipts")
                     }
                     Box {
                         IconButton(onClick = { filterMenuOpen = true }) {
                             Icon(
-                                Icons.Default.FilterList,
+                                Icons.Default.MoreVert,
                                 contentDescription = "Filter receipts",
                                 tint = if (filter == ReceiptFilter.ALL) {
                                     MaterialTheme.colorScheme.onSurfaceVariant
@@ -135,8 +156,16 @@ fun ReceiptsScreen(
                             }
                         }
                     }
+                    IconButton(onClick = onOpenStoreSettings) {
+                        Icon(Icons.Default.Settings, contentDescription = "Settings")
+                    }
                 },
             )
+        },
+        floatingActionButton = {
+            FloatingActionButton(onClick = { addSheetOpen = true }) {
+                Icon(Icons.Default.Add, contentDescription = "Add receipt")
+            }
         },
     ) { innerPadding ->
         Column(
@@ -144,29 +173,13 @@ fun ReceiptsScreen(
                 .fillMaxSize()
                 .padding(innerPadding),
         ) {
-            AnimatedVisibility(visible = searchOpen) {
-                OutlinedTextField(
-                    value = query,
-                    onValueChange = { query = it },
-                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                    label = { Text("Search merchant or item") },
-                    singleLine = true,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(
-                            horizontal = MaterialTheme.spacing.medium,
-                            vertical = MaterialTheme.spacing.small,
-                        ),
-                )
-            }
-
             when {
                 receipts.isEmpty() -> EmptyStateCard(
                     title = "Keep every receipt in one piece",
-                    body = "Record across the receipt, or import your BIO COMPANY purchases. " +
-                        "The archive stays on this device.",
-                    actionLabel = "Scan receipt",
-                    onAction = onScanReceipt,
+                    body = "Record across the receipt, or import purchases from a connected " +
+                        "store account. The archive stays on this device.",
+                    actionLabel = "Add receipt",
+                    onAction = { addSheetOpen = true },
                     modifier = Modifier
                         .weight(1f)
                         .padding(MaterialTheme.spacing.medium),
@@ -174,12 +187,9 @@ fun ReceiptsScreen(
 
                 filtered.isEmpty() -> EmptyStateCard(
                     title = "Nothing found",
-                    body = "Try another merchant, product, or phrase.",
-                    actionLabel = if (query.isBlank()) "Show all receipts" else "Clear search",
-                    onAction = {
-                        query = ""
-                        filter = ReceiptFilter.ALL
-                    },
+                    body = "No receipts match this filter.",
+                    actionLabel = "Show all receipts",
+                    onAction = { filter = ReceiptFilter.ALL },
                     icon = Icons.Default.Search,
                     modifier = Modifier
                         .weight(1f)
@@ -191,10 +201,20 @@ fun ReceiptsScreen(
                     contentPadding = PaddingValues(
                         start = MaterialTheme.spacing.medium,
                         end = MaterialTheme.spacing.medium,
-                        bottom = MaterialTheme.spacing.small,
+                        // Clearance for the FAB so the last row stays reachable.
+                        bottom = MaterialTheme.spacing.threeExtraLarge * 2,
                     ),
                     verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small),
                 ) {
+                    if (spendSummary.totalCents > 0L) {
+                        item(key = "spend-summary") {
+                            SpendSummaryCard(
+                                summary = spendSummary,
+                                previousPeriodName = "previous 30 days",
+                                modifier = Modifier.padding(top = MaterialTheme.spacing.small),
+                            )
+                        }
+                    }
                     sections.forEach { (label, group) ->
                         item(key = "header-$label") {
                             Text(
@@ -217,20 +237,43 @@ fun ReceiptsScreen(
                     }
                 }
             }
+        }
+    }
 
-            Button(
-                onClick = onImportReceipt,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(
-                        horizontal = MaterialTheme.spacing.medium,
-                        vertical = MaterialTheme.spacing.small,
-                    )
-                    .height(52.dp),
-            ) {
-                Text("Import Receipt", fontWeight = FontWeight.Bold)
+    GroceriesSearchBar(
+        state = searchState,
+        placeholder = "Search merchant or item",
+    ) {
+        LazyColumn(
+            contentPadding = PaddingValues(
+                start = MaterialTheme.spacing.medium,
+                end = MaterialTheme.spacing.medium,
+                bottom = MaterialTheme.spacing.medium,
+            ),
+            verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small),
+        ) {
+            items(searchResults, key = DigitalReceipt::id) { receipt ->
+                ReceiptRow(
+                    receipt = receipt,
+                    onClick = {
+                        searchScope.launch { searchState.collapse() }
+                        onOpenReceipt(receipt.id)
+                    },
+                )
             }
         }
+    }
+
+    if (addSheetOpen) {
+        AddReceiptSheet(
+            bioCompanyConnected = bioCompanyConnected,
+            reweConnected = reweConnected,
+            onScanReceipt = onScanReceipt,
+            onImportBioCompany = onImportBioCompany,
+            onImportRewe = onImportRewe,
+            onOpenStoreSettings = onOpenStoreSettings,
+            onDismiss = { addSheetOpen = false },
+        )
     }
 }
 
@@ -240,9 +283,8 @@ private fun ReceiptRow(
     onClick: () -> Unit,
 ) {
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainer,
         ),
@@ -265,7 +307,7 @@ private fun ReceiptRow(
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    formatReceiptTimestamp(receipt.dateEpochMillis ?: receipt.createdAtEpochMillis),
+                    formatReceiptTimestamp(receipt.dateEpochMillis, receipt.createdAtEpochMillis),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -274,7 +316,6 @@ private fun ReceiptRow(
                 Text(
                     formatCurrency(receipt.totalCents, receipt.currency),
                     style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
                 )
                 Text(
                     "${receipt.items.size} ${if (receipt.items.size == 1) "item" else "items"}",
@@ -282,6 +323,11 @@ private fun ReceiptRow(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+            Icon(
+                Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }

@@ -900,6 +900,14 @@
     10
    ]
   },
+  "HERBS_POTTED": {
+   "foodKeeperName": "Potted herb plant (no FoodKeeper entry; hand-estimated, needs review)",
+   "pantryDays": [
+    14,
+    28
+   ],
+   "source": "MANUAL_ESTIMATE"
+  },
   "HERRING": {
    "foodKeeperName": "Herring",
    "source": "USDA_FOODKEEPER",
@@ -1389,12 +1397,16 @@
    ]
   },
   "PLANT_MILK": {
-   "foodKeeperName": "Soy milk",
+   "foodKeeperName": "Soy milk (opened window from FoodKeeper; unopened window hand-estimated like UHT milk, needs review)",
    "openedFridgeDays": [
     7,
     10
    ],
-   "source": "USDA_FOODKEEPER"
+   "pantryDays": [
+    60,
+    180
+   ],
+   "source": "MANUAL_ESTIMATE"
   },
   "PLUM": {
    "foodKeeperName": "Peaches, nectarines, plums, pears, sapote",

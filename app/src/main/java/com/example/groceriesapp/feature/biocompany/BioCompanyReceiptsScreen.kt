@@ -12,7 +12,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.NotInterested
@@ -38,10 +38,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.example.groceriesapp.data.GroceriesRepository
-import com.example.groceriesapp.data.ReceiptItem
+import com.example.groceriesapp.data.toReceiptItems
 import com.example.groceriesapp.data.network.BioCompanyReceiptDetail
 import com.example.groceriesapp.data.network.BioCompanyReceiptEntry
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.ui.semantics.Role
 import com.example.groceriesapp.ui.theme.spacing
 import kotlin.collections.mutableSetOf
 import kotlin.collections.setOf
@@ -69,7 +70,7 @@ fun BioCompanyReceiptsScreen(
                 title = { Text("Import BIO COMPANY Receipts") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = null)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
             )
@@ -163,14 +164,7 @@ fun BioCompanyReceiptsScreen(
                                         val detail = fetchDetail(entry)
                                         if (detail.isSuccess) {
                                             val d = detail.getOrNull() ?: continue
-                                            val items = d.items.map { item ->
-                                                ReceiptItem(
-                                                    name = item.name,
-                                                    quantity = item.quantity.coerceAtLeast(0.1),
-                                                    unit = item.unit,
-                                                    priceCents = item.priceCents,
-                                                )
-                                            }
+                                            val items = d.items.toReceiptItems()
                                             val totalCents = (entry.amount * 100).toInt()
                                             groceryRepository.importBioCompanyReceipt(
                                                 merchant = "BIO COMPANY",
@@ -221,7 +215,16 @@ private fun ReceiptRow(
     onToggle: () -> Unit,
 ) {
     Card(
-        modifier = Modifier.fillMaxWidth().clickable(enabled = !alreadyImported, onClick = onToggle),
+        // toggleable rather than clickable: selection is otherwise carried only by a trailing icon,
+        // so TalkBack had no way to announce whether a row was picked.
+        modifier = Modifier
+            .fillMaxWidth()
+            .toggleable(
+                value = selected,
+                enabled = !alreadyImported,
+                role = Role.Checkbox,
+                onValueChange = { onToggle() },
+            ),
         colors = CardDefaults.cardColors(
             containerColor = if (selected) {
                 MaterialTheme.colorScheme.secondaryContainer
@@ -261,9 +264,9 @@ private fun ReceiptRow(
                 }
             }
             when {
-                alreadyImported -> Icon(Icons.Default.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                alreadyImported -> Icon(Icons.Default.CheckCircle, contentDescription = "Already imported", tint = MaterialTheme.colorScheme.primary)
                 selected -> Icon(Icons.Default.Check, contentDescription = null, tint = MaterialTheme.colorScheme.secondary)
-                else -> Icon(Icons.Default.NotInterested, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f))
+                else -> Icon(Icons.Default.NotInterested, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }

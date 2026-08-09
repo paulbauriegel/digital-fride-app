@@ -32,14 +32,16 @@ internal val bakeryGrainsConcepts: List<FoodConcept> = listOf(
         category = GroceryCategory.BAKERY,
         displayName = "Bread roll",
         iconRes = R.drawable.ic_food_roll,
-        keywords = listOf("brötchen", "broetchen", "semmel", "schrippe"),
+        keywords = listOf("brötchen", "broetchen", "broet", "semmel", "schrippe"),
     ),
     FoodConcept(
         id = "BAGUETTE",
         category = GroceryCategory.BAKERY,
         displayName = "Baguette",
         iconRes = R.drawable.ic_food_baguette,
-        keywords = listOf("baguette"),
+        // "mehrkornbag" catches receipt truncation of "Mehrkornbaguette" (multigrain baguette),
+        // the same pattern as JUICE's "traubensaf" for truncated "Traubensaft".
+        keywords = listOf("baguette", "mehrkornbaguette", "mehrkornbag"),
     ),
     FoodConcept(
         id = "CROISSANT",

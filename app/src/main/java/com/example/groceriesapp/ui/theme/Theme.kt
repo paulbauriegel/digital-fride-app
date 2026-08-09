@@ -33,10 +33,13 @@ fun GroceriesTheme(
         else -> GroceriesLightColorScheme
     }
     val scanStatusColors = if (darkTheme) DarkScanStatusColors else LightScanStatusColors
+    val storageLocationColors =
+        if (darkTheme) DarkStorageLocationColors else LightStorageLocationColors
 
     CompositionLocalProvider(
         LocalAppSpacing provides AppSpacing(),
         LocalScanStatusColors provides scanStatusColors,
+        LocalStorageLocationColors provides storageLocationColors,
     ) {
         MaterialTheme(
             colorScheme = colorScheme,

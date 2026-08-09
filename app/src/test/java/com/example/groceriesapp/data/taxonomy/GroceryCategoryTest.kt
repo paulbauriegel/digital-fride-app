@@ -58,7 +58,10 @@ class GroceryCategoryTest {
     @Test
     fun onlyNonFoodCategoriesOptOutOfExpiry() {
         val withoutExpiry = GroceryCategory.entries.filterNot(GroceryCategory::supportsExpiry)
-        assertEquals(listOf(GroceryCategory.HOUSEHOLD, GroceryCategory.OTHER), withoutExpiry)
+        assertEquals(
+            listOf(GroceryCategory.HOUSEHOLD, GroceryCategory.DEPOSIT, GroceryCategory.OTHER),
+            withoutExpiry,
+        )
     }
 
     /** Loose goods aren't sealed packaging, so they're treated as opened from the moment they're bought. */

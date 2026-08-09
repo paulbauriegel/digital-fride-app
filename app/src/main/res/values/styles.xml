@@ -1,8 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!--
+      Compose owns everything the user sees, so this theme only governs the window itself: the
+      background painted before the first composition, and the system bar treatment.
+
+      windowLightStatusBar is deliberately absent. MainActivity drives bar appearance at runtime
+      from the user's dark/light preference (WindowCompat.getInsetsController), and hardcoding it
+      here only fought that for the first frame.
+
+      There is no values-night variant on purpose: the app's dark/light setting is a stored user
+      preference, not the system uiMode, so a -night qualifier would desync from the actual theme
+      whenever the two disagree. The background below matches the dark scheme's surface, which is
+      also the app's default.
+    -->
     <style name="Theme.GroceriesApp" parent="android:style/Theme.Material.NoActionBar">
         <item name="android:fontFamily">sans</item>
-        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowBackground">@color/window_background</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:windowActionModeOverlay">true</item>

@@ -135,16 +135,12 @@ class ReceiptParser(
             .trim(' ', '-', 'x', 'X')
             .ifBlank { rawName }
 
-        val concept = FoodConceptCatalog.match(cleanedName)
-        return ParsedLineItem(
-            name = cleanedName.lowercase(Locale.GERMANY)
-                .replaceFirstChar { it.titlecase(Locale.GERMANY) },
+        return finishParsedLineItem(
+            name = cleanedName,
             quantity = quantity,
             unit = unit,
             lineTotalCents = cents,
-            category = (concept?.category ?: GroceryCategory.OTHER).name,
-            foodConceptId = concept?.id,
-            needsReview = rawName.length < 4 || OCR_AMBIGUITY.containsMatchIn(rawName),
+            reviewSourceText = rawName,
         )
     }
 
@@ -169,27 +165,7 @@ class ReceiptParser(
         else -> unit
     }
 
-    private fun String.toCentsOrNull(): Long? = runCatching {
-        val compact = replace(" ", "")
-        val decimal = when {
-            ',' in compact && '.' in compact -> {
-                if (compact.lastIndexOf(',') > compact.lastIndexOf('.')) {
-                    compact.replace(".", "").replace(',', '.')
-                } else {
-                    compact.replace(",", "")
-                }
-            }
-            ',' in compact -> compact.replace(',', '.')
-            else -> compact
-        }
-        decimal
-            .toBigDecimal()
-            .multiply(BigDecimal(100))
-            .setScale(0, RoundingMode.HALF_UP)
-            .longValueExact()
-    }.getOrNull()
-
-    private companion object {
+    internal companion object {
         val ITEM_LINE = Regex("^(.+?)[\\s:]+(-?\\d{1,4}[.,]\\d{2})\\s*[A-Z]?$")
         val PRICE_AT_END = Regex("-?\\d{1,4}[.,]\\d{2}\\s*[A-Z]?$")
         val PRICE_ANYWHERE = Regex("-?\\d{1,4}(?:[.]\\d{3})*[.,]\\d{2}")
@@ -255,3 +231,49 @@ class ReceiptParser(
         )
     }
 }
+
+/**
+ * Shared tail of line-item construction so every extraction engine (rules, Granite, OpenAI)
+ * assigns categories, concepts, and review flags identically — engines never invent categories.
+ */
+internal fun finishParsedLineItem(
+    name: String,
+    quantity: Double,
+    unit: String?,
+    lineTotalCents: Long,
+    reviewSourceText: String = name,
+): ParsedLineItem {
+    val concept = FoodConceptCatalog.match(name)
+    return ParsedLineItem(
+        name = name.lowercase(Locale.GERMANY)
+            .replaceFirstChar { it.titlecase(Locale.GERMANY) },
+        quantity = quantity,
+        unit = unit,
+        lineTotalCents = lineTotalCents,
+        category = (concept?.category ?: GroceryCategory.OTHER).name,
+        foodConceptId = concept?.id,
+        needsReview = reviewSourceText.length < 4 ||
+            ReceiptParser.OCR_AMBIGUITY.containsMatchIn(reviewSourceText),
+    )
+}
+
+/** Parses a German or English decimal money string ("2,49", "1.234,56") into cents. */
+internal fun String.toCentsOrNull(): Long? = runCatching {
+    val compact = replace(" ", "")
+    val decimal = when {
+        ',' in compact && '.' in compact -> {
+            if (compact.lastIndexOf(',') > compact.lastIndexOf('.')) {
+                compact.replace(".", "").replace(',', '.')
+            } else {
+                compact.replace(",", "")
+            }
+        }
+        ',' in compact -> compact.replace(',', '.')
+        else -> compact
+    }
+    decimal
+        .toBigDecimal()
+        .multiply(BigDecimal(100))
+        .setScale(0, RoundingMode.HALF_UP)
+        .longValueExact()
+}.getOrNull()

@@ -2,11 +2,13 @@ package com.example.groceriesapp.feature.scanner
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.graphics.BitmapFactory
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -16,6 +18,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -50,22 +53,26 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -74,6 +81,8 @@ import com.example.groceriesapp.ui.theme.spacing
 import com.example.groceriesapp.vision.ProcessingStage
 import com.example.groceriesapp.vision.capture.LiveCaptureGuidance
 import com.example.groceriesapp.vision.capture.ReceiptBoundaryOverlay
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 @Composable
 fun ScannerScreen(
@@ -251,8 +260,11 @@ private fun ScannerTopBar(
             shape = CircleShape,
         ) {
             Row(
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.padding(
+                    horizontal = MaterialTheme.spacing.medium,
+                    vertical = MaterialTheme.spacing.small,
+                ),
+                horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 if (state.phase == ScanPhase.RECORDING) {
@@ -366,16 +378,16 @@ private fun CaptureControlPanel(
         Column(
             modifier = Modifier
                 .navigationBarsPadding()
-                .padding(20.dp)
+                .padding(MaterialTheme.spacing.large)
                 .semantics { liveRegion = LiveRegionMode.Polite },
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+            verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.medium),
         ) {
             AnimatedContent(
                 targetState = guidance,
                 label = "capture guidance",
             ) { content ->
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.medium),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Surface(
@@ -386,14 +398,13 @@ private fun CaptureControlPanel(
                         Icon(
                             imageVector = content.icon,
                             contentDescription = null,
-                            modifier = Modifier.padding(12.dp),
+                            modifier = Modifier.padding(MaterialTheme.spacing.medium),
                         )
                     }
-                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Column(verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.extraSmall)) {
                         Text(
                             text = content.title,
                             style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
                             color = accent,
                         )
                         Text(
@@ -407,7 +418,7 @@ private fun CaptureControlPanel(
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small),
             ) {
                 StatusPill(
                     label = if (state.observation.arTracking) "AR tracking" else "AR paused",
@@ -430,7 +441,7 @@ private fun CaptureControlPanel(
                         .height(56.dp),
                 ) {
                     Icon(Icons.Default.MotionPhotosOn, contentDescription = null)
-                    Spacer(Modifier.size(8.dp))
+                    Spacer(Modifier.size(MaterialTheme.spacing.small))
                     Text("Start recording")
                 }
                 ScanPhase.RECORDING -> Button(
@@ -441,7 +452,7 @@ private fun CaptureControlPanel(
                         .height(56.dp),
                 ) {
                     Icon(Icons.Default.StopCircle, contentDescription = null)
-                    Spacer(Modifier.size(8.dp))
+                    Spacer(Modifier.size(MaterialTheme.spacing.small))
                     Text(
                         when {
                             state.captureBusy -> "Saving keyframe…"
@@ -474,8 +485,11 @@ private fun StatusPill(
         shape = CircleShape,
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier.padding(
+                horizontal = MaterialTheme.spacing.medium,
+                vertical = MaterialTheme.spacing.small,
+            ),
+            horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(
@@ -533,6 +547,19 @@ private fun guidanceContent(
 @Composable
 private fun ProcessingReceiptScreen(state: ScanUiState) {
     val stage = state.processingStage ?: ProcessingStage.STITCHING
+    val previewPath = state.processingPreviewPath
+    val preview by produceState<ImageBitmap?>(null, previewPath) {
+        value = previewPath?.let { path ->
+            withContext(Dispatchers.IO) {
+                BitmapFactory.decodeFile(path)?.asImageBitmap()
+            }
+        }
+    }
+    // The determinate bar stalls for the whole OCR stage when a local language model reads the
+    // panorama (minutes, no intermediate progress), so switch to an indeterminate bar there.
+    // The same applies to the parsing stage when a language model extracts the items.
+    val indeterminate = (stage == ProcessingStage.RECOGNIZING_TEXT && state.slowOcrEngine) ||
+        (stage == ProcessingStage.PARSING_ITEMS && state.slowExtraction)
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -542,11 +569,22 @@ private fun ProcessingReceiptScreen(state: ScanUiState) {
         Column(
             modifier = Modifier
                 .widthIn(max = 480.dp)
-                .padding(32.dp),
+                .padding(MaterialTheme.spacing.extraLarge),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(18.dp),
+            verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.medium),
         ) {
-            CircularProgressIndicator()
+            preview?.let { bitmap ->
+                Image(
+                    bitmap = bitmap,
+                    contentDescription = "Stitched receipt panorama",
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 320.dp)
+                        .clip(MaterialTheme.shapes.large)
+                        .background(MaterialTheme.colorScheme.surfaceContainerHighest),
+                )
+            } ?: CircularProgressIndicator()
             Text(
                 text = when (stage) {
                     ProcessingStage.STITCHING -> "Building the receipt panorama"
@@ -558,15 +596,31 @@ private fun ProcessingReceiptScreen(state: ScanUiState) {
                 textAlign = TextAlign.Center,
             )
             Text(
-                "The selected frames are aligned on the receipt plane and written as one continuous image.",
+                text = when {
+                    stage == ProcessingStage.STITCHING ->
+                        "The selected frames are aligned on the receipt plane and written as " +
+                            "one continuous image."
+                    stage == ProcessingStage.RECOGNIZING_TEXT && state.slowOcrEngine ->
+                        "The panorama is ready. The on-device GLM-OCR model is reading it now — " +
+                            "this can take several minutes. ML Kit in Settings is much faster."
+                    stage == ProcessingStage.RECOGNIZING_TEXT ->
+                        "The panorama is ready and its text is being recognized."
+                    stage == ProcessingStage.PARSING_ITEMS && state.slowExtraction ->
+                        "A language model is extracting the items — this can take a while."
+                    else -> "Almost done."
+                },
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
             )
-            LinearProgressIndicator(
-                progress = { state.processingProgress },
-                modifier = Modifier.fillMaxWidth(),
-            )
+            if (indeterminate) {
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            } else {
+                LinearProgressIndicator(
+                    progress = { state.processingProgress },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
         }
     }
 }
@@ -587,9 +641,9 @@ private fun ScannerErrorScreen(
         Column(
             modifier = Modifier
                 .widthIn(max = 480.dp)
-                .padding(24.dp),
+                .padding(MaterialTheme.spacing.large),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+            verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.medium),
         ) {
             Icon(
                 Icons.Default.Warning,
@@ -627,9 +681,9 @@ private fun CameraPermissionScreen(
         Column(
             modifier = Modifier
                 .widthIn(max = 480.dp)
-                .padding(24.dp),
+                .padding(MaterialTheme.spacing.large),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+            verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.medium),
         ) {
             Icon(
                 Icons.AutoMirrored.Filled.ReceiptLong,

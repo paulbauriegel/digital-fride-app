@@ -5,6 +5,7 @@ import com.example.groceriesapp.data.ReceiptImageEdit
 import com.example.groceriesapp.data.ReceiptStatus
 import com.example.groceriesapp.data.ReceiptTextRegion
 import com.example.groceriesapp.vision.parsing.ReceiptParser
+import com.example.groceriesapp.vision.parsing.RulesReceiptItemExtractor
 import java.time.ZoneOffset
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -52,7 +53,7 @@ class ReceiptOcrRerunnerTest {
         )
         var recognizedInput: ReceiptOcrInput? = null
         val rerunner = ReceiptOcrRerunner(
-            parser = ReceiptParser(ZoneOffset.UTC),
+            itemExtractor = RulesReceiptItemExtractor(ReceiptParser(ZoneOffset.UTC)),
             recognizer = ReceiptOcrRecognizer { input ->
                 recognizedInput = input
                 ocrResult

@@ -9,8 +9,11 @@ import com.example.groceriesapp.vision.ProcessingStage
 import com.example.groceriesapp.vision.ReceiptProcessingPipeline
 import com.example.groceriesapp.vision.capture.LiveCaptureGuidance
 import com.example.groceriesapp.vision.capture.ReceiptCaptureObservation
+import com.example.groceriesapp.vision.ocr.MlKitReceiptOcrRecognizer
 import com.example.groceriesapp.vision.ocr.ReceiptOcrRecognizer
 import com.example.groceriesapp.vision.overallProgress
+import com.example.groceriesapp.vision.parsing.ReceiptItemExtractor
+import com.example.groceriesapp.vision.parsing.RulesReceiptItemExtractor
 import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CancellationException
@@ -37,6 +40,12 @@ data class ScanUiState(
     val torchEnabled: Boolean = false,
     val processingStage: ProcessingStage? = null,
     val processingProgress: Float = 0f,
+    /** Stitched panorama preview, available once the image is built and OCR is still running. */
+    val processingPreviewPath: String? = null,
+    /** True when the selected OCR engine runs a local language model and may take minutes. */
+    val slowOcrEngine: Boolean = false,
+    /** True when item extraction goes through a language model and may take a while. */
+    val slowExtraction: Boolean = false,
     val completedReceiptId: String? = null,
     val errorMessage: String? = null,
     val processingFailure: Boolean = false,
@@ -61,16 +70,22 @@ class ScanViewModel(
     private val repository: GroceriesRepository,
     sessionId: String,
     ocrRecognizer: ReceiptOcrRecognizer,
+    itemExtractor: ReceiptItemExtractor = RulesReceiptItemExtractor(),
 ) : ViewModel() {
     private val draft = repository.openOrCreateScanSession(sessionId)
     private val session: ScanSession = draft.session
     private val processingPipeline = ReceiptProcessingPipeline(
         repository = repository,
         ocrRecognizer = ocrRecognizer,
+        itemExtractor = itemExtractor,
     )
     private val terminated = AtomicBoolean(false)
     private val _uiState = MutableStateFlow(
-        ScanUiState(acceptedFramePaths = draft.acceptedFramePaths),
+        ScanUiState(
+            acceptedFramePaths = draft.acceptedFramePaths,
+            slowOcrEngine = ocrRecognizer !is MlKitReceiptOcrRecognizer,
+            slowExtraction = itemExtractor !is RulesReceiptItemExtractor,
+        ),
     )
     val uiState: StateFlow<ScanUiState> = _uiState.asStateFlow()
     private var processingJob: Job? = null
@@ -206,6 +221,7 @@ class ScanViewModel(
                 captureBusy = false,
                 processingStage = ProcessingStage.STITCHING,
                 processingProgress = 0f,
+                processingPreviewPath = null,
                 errorMessage = null,
                 processingFailure = false,
             )
@@ -215,6 +231,11 @@ class ScanViewModel(
                 val receipt = processingPipeline.process(
                     session = session,
                     framePaths = framePaths,
+                    onPreviewReady = { previewPath ->
+                        if (generation == processingGeneration) {
+                            _uiState.update { it.copy(processingPreviewPath = previewPath) }
+                        }
+                    },
                 ) { stage, stageProgress ->
                     if (generation == processingGeneration) {
                         _uiState.update {
@@ -274,10 +295,11 @@ class ScanViewModelFactory(
     private val repository: GroceriesRepository,
     private val sessionId: String,
     private val ocrRecognizer: ReceiptOcrRecognizer,
+    private val itemExtractor: ReceiptItemExtractor,
 ) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         require(modelClass.isAssignableFrom(ScanViewModel::class.java))
-        return ScanViewModel(repository, sessionId, ocrRecognizer) as T
+        return ScanViewModel(repository, sessionId, ocrRecognizer, itemExtractor) as T
     }
 }

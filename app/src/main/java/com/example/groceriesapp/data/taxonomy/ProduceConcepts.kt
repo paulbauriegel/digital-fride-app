@@ -10,7 +10,7 @@ internal val produceConcepts: List<FoodConcept> = listOf(
         category = GroceryCategory.FRUIT,
         displayName = "Apple",
         iconRes = R.drawable.ic_food_apple,
-        keywords = listOf("apfel", "äpfel", "aepfel", "boskoop", "elstar"),
+        keywords = listOf("apfel", "äpfel", "aepfel", "boskoop", "elstar", "jonagold"),
     ),
     FoodConcept(
         id = "PEAR",
@@ -52,7 +52,7 @@ internal val produceConcepts: List<FoodConcept> = listOf(
         category = GroceryCategory.FRUIT,
         displayName = "Grapes",
         iconRes = R.drawable.ic_food_grapes,
-        keywords = listOf("traube"),
+        keywords = listOf("traube", "traub"),
     ),
     FoodConcept(
         id = "STRAWBERRY",
@@ -449,5 +449,20 @@ internal val produceConcepts: List<FoodConcept> = listOf(
         displayName = "Fresh herbs",
         iconRes = R.drawable.ic_food_herbs_fresh,
         keywords = listOf("petersilie", "schnittlauch", "basilikum", "koriander", "dill"),
+    ),
+    FoodConcept(
+        id = "HERBS_POTTED",
+        category = GroceryCategory.VEGETABLES,
+        displayName = "Potted herb",
+        iconRes = R.drawable.ic_food_herbs_fresh,
+        // A living, rooted plant sold in a pot ("im Topf") keeps for weeks on a windowsill —
+        // unlike HERBS_FRESH's cut leaves — so it needs its own concept and shelf-life rule.
+        // "basilikum im top" (no trailing f) also catches receipt truncation, e.g. "Basilikum im
+        // Top" — the same pattern as JUICE's "traubensaf" for truncated "Traubensaft".
+        keywords = listOf(
+            "basilikum im topf", "basilikum im top",
+            "petersilie im topf", "schnittlauch im topf",
+            "kräutertopf", "kraeutertopf",
+        ),
     ),
 )

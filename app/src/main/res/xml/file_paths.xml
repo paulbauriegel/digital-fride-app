@@ -1,6 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <!--
+      Receipts live under groceries/households/<id>/receipts/ and files-path takes no wildcard, so
+      the shared parent has to be declared. Only preview JPEGs are ever turned into URIs, and each
+      grant is per-URI, so the wider declaration does not widen what actually leaves the app.
+    -->
     <files-path
         name="receipt_exports"
-        path="groceries/receipts/" />
+        path="groceries/households/" />
+    <cache-path
+        name="camera_capture"
+        path="camera/" />
 </paths>

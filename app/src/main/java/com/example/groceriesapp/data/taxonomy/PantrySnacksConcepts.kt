@@ -24,7 +24,9 @@ internal val pantrySnacksConcepts: List<FoodConcept> = listOf(
         category = GroceryCategory.FROZEN,
         displayName = "Ice cream",
         iconRes = R.drawable.ic_food_ice_cream,
-        keywords = listOf("eiscreme", "speiseeis", "magnum"),
+        // "mini mix" catches assorted ice-cream-on-a-stick multipacks (e.g. "Mini Mix classic"),
+        // the same product family as "magnum".
+        keywords = listOf("eiscreme", "speiseeis", "magnum", "mini mix"),
     ),
     FoodConcept(
         id = "FROZEN_VEG",
@@ -50,7 +52,8 @@ internal val pantrySnacksConcepts: List<FoodConcept> = listOf(
             "bratkartoffel", "bratkrt", "fertiggericht",
             // Only ever appears in fried noodle/rice dishes (Bami/Nasi Goreng), all prepared meals.
             "goreng",
-            "butter chicken",
+            "butter chicken", "mexican chicken",
+            "huehnerfrikasse", "hühnerfrikassee",
         ),
         // These must outrank the ingredient concepts they contain — SPICE_MIX's "curry",
         // POTATO's "kartoffel", BUTTER's "butter" — since the product is a prepared dish,
@@ -58,7 +61,7 @@ internal val pantrySnacksConcepts: List<FoodConcept> = listOf(
         priorityKeywords = listOf(
             "rotes curry", "gruenes curry", "grünes curry",
             "bratkartoffel", "bratkrt", "fertiggericht",
-            "butter chicken",
+            "butter chicken", "mexican chicken",
         ),
     ),
     // SNACKS_SWEETS
@@ -81,7 +84,8 @@ internal val pantrySnacksConcepts: List<FoodConcept> = listOf(
         category = GroceryCategory.SNACKS_SWEETS,
         displayName = "Sweets",
         iconRes = R.drawable.ic_food_candy,
-        keywords = listOf("bonbon", "gummibär", "fruchtgummi", "lakritz", "phantasia"),
+        // "fruchtbumi" is an OCR misread of "Fruchtgummi" (g misread as b).
+        keywords = listOf("bonbon", "gummibär", "fruchtgummi", "fruchtbumi", "lakritz", "phantasia"),
     ),
     FoodConcept(
         id = "CHIPS",
@@ -134,6 +138,14 @@ internal val pantrySnacksConcepts: List<FoodConcept> = listOf(
         displayName = "Ketchup",
         iconRes = R.drawable.ic_food_ketchup,
         keywords = listOf("ketchup"),
+    ),
+    FoodConcept(
+        id = "BARBECUE_SAUCE",
+        category = GroceryCategory.CONDIMENTS_SAUCES,
+        displayName = "Barbecue sauce",
+        // No dedicated artwork; ketchup is the closest match — same bottled-condiment role.
+        iconRes = R.drawable.ic_food_ketchup,
+        keywords = listOf("barbecue sauce", "bbq sauce", "grillsauce", "grillsoße"),
     ),
     FoodConcept(
         id = "MAYONNAISE",
@@ -240,6 +252,17 @@ internal val pantrySnacksConcepts: List<FoodConcept> = listOf(
         displayName = "Compote",
         iconRes = R.drawable.ic_food_compote,
         keywords = listOf("apfelmus", "kompott"),
+    ),
+    FoodConcept(
+        id = "CANNED_FRUIT",
+        category = GroceryCategory.CANNED_JARRED,
+        displayName = "Tinned fruit",
+        // No dedicated artwork; the compote jar is the closest match among the bundled icons.
+        iconRes = R.drawable.ic_food_compote,
+        // Distinct product from COMPOTE: whole/diced fruit pieces in syrup, not a cooked-down
+        // sauce. "5-Fruchtcocktail" (five-fruit mix) is the common branding; the leading digit
+        // doesn't need its own keyword since "fruchtcocktail" already matches as a substring.
+        keywords = listOf("fruchtcocktail", "früchtecocktail", "obstsalat"),
     ),
     // SPICES_BAKING
     FoodConcept(

@@ -7,6 +7,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -14,7 +15,7 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import com.example.groceriesapp.ui.components.charts.chartColors
 
 /**
  * Circular merchant badge tinted with the retailer's recognizable brand colour.
@@ -37,7 +38,16 @@ fun InitialsBadge(
     size: Dp = 44.dp,
 ) {
     val background = merchantColor(label)
+    // Brand colours are arbitrary, so the readable foreground has to be derived rather than taken
+    // from a theme role.
     val content = if (background.luminance() > 0.45f) Color.Black else Color.White
+    // Picking a type token by badge size keeps the label responsive to the user's font scale;
+    // deriving an sp from size.value would pin it to the layout and ignore that setting entirely.
+    val style = when {
+        size >= 52.dp -> MaterialTheme.typography.titleLarge
+        size >= 40.dp -> MaterialTheme.typography.titleMedium
+        else -> MaterialTheme.typography.titleSmall
+    }
     Surface(
         shape = CircleShape,
         color = background,
@@ -48,8 +58,7 @@ fun InitialsBadge(
                 text = merchantInitials(label),
                 color = content,
                 fontWeight = FontWeight.Bold,
-                fontSize = (size.value * 0.32f).sp,
-                style = MaterialTheme.typography.titleMedium,
+                style = style,
             )
         }
     }
@@ -69,12 +78,19 @@ fun merchantInitials(merchant: String?): String {
     return letters.uppercase()
 }
 
+/**
+ * Brand colour where the retailer is recognized, otherwise a stable pick from the theme's own
+ * categorical palette so unknown merchants still follow light/dark and any future re-theming.
+ */
+@Composable
+@ReadOnlyComposable
 fun merchantColor(merchant: String?): Color {
     val name = merchant.orEmpty().uppercase()
     BRAND_COLORS.firstOrNull { (key, _) -> name.contains(key) }?.let { (_, color) -> return color }
-    if (name.isBlank()) return FALLBACK_COLORS.first()
-    val index = (name.hashCode().toLong() and 0xFFFFFFFFL) % FALLBACK_COLORS.size
-    return FALLBACK_COLORS[index.toInt()]
+    val fallbacks = chartColors()
+    if (name.isBlank()) return fallbacks.first()
+    val index = (name.hashCode().toLong() and 0xFFFFFFFFL) % fallbacks.size
+    return fallbacks[index.toInt()]
 }
 
 private val BRAND_COLORS: List<Pair<String, Color>> = listOf(
@@ -92,11 +108,3 @@ private val BRAND_COLORS: List<Pair<String, Color>> = listOf(
     "DM" to Color(0xFF002878),
 )
 
-private val FALLBACK_COLORS: List<Color> = listOf(
-    Color(0xFF4C7A34),
-    Color(0xFF2F6F8F),
-    Color(0xFF8A5A2B),
-    Color(0xFF6A4C93),
-    Color(0xFF9C5560),
-    Color(0xFF3F7A6E),
-)

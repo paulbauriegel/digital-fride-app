@@ -10,7 +10,10 @@ internal val meatFishConcepts: List<FoodConcept> = listOf(
         category = GroceryCategory.MEAT,
         displayName = "Chicken",
         iconRes = R.drawable.ic_food_chicken,
-        keywords = listOf("hähnchen", "haehnchen", "huhn", "hühner", "poulet"),
+        // "ha-innenfilet" is a receipt abbreviation for "Hähnchen Innenfilet" (chicken
+        // tenderloin) — kept as the exact abbreviated string rather than the generic
+        // "innenfilet" cut name, which is also used for pork and turkey tenderloin.
+        keywords = listOf("hähnchen", "haehnchen", "huhn", "hühner", "poulet", "ha-innenfilet"),
     ),
     FoodConcept(
         id = "TURKEY",
@@ -55,6 +58,26 @@ internal val meatFishConcepts: List<FoodConcept> = listOf(
         keywords = listOf("wurst", "bratwurst", "wiener", "bockwurst"),
     ),
     FoodConcept(
+        id = "VEGAN_SAUSAGE",
+        // Filed alongside real sausage rather than a dedicated vegetarian category — same
+        // shelving, storage and shelf-life pattern, the same choice PLANT_MILK makes under DAIRY.
+        category = GroceryCategory.MEAT,
+        displayName = "Vegan sausage",
+        iconRes = R.drawable.ic_food_sausage,
+        // "vegane bratw" (not bare "bratw") so a truncated *real* bratwurst ("Bratw." without the
+        // "vegane" qualifier) doesn't get misclassified as vegan.
+        keywords = listOf("vegane bratw", "vegane bratwurst", "veganer wurst", "veggie wurst"),
+    ),
+    FoodConcept(
+        // Grill cuts and skewers sold by their purpose rather than their animal — "Grillfackel",
+        // "Brat-/Grillwurst" — where the receipt line never names the meat.
+        id = "GRILL_MEAT",
+        category = GroceryCategory.MEAT,
+        displayName = "Grill meat",
+        iconRes = R.drawable.ic_food_sausage,
+        keywords = listOf("grillfackel", "brat/grill", "grillt"),
+    ),
+    FoodConcept(
         id = "SALAMI",
         category = GroceryCategory.MEAT,
         displayName = "Salami",
@@ -80,7 +103,7 @@ internal val meatFishConcepts: List<FoodConcept> = listOf(
         category = GroceryCategory.MEAT,
         displayName = "Cold cuts",
         iconRes = R.drawable.ic_food_cold_cuts,
-        keywords = listOf("aufschnitt", "lyoner"),
+        keywords = listOf("aufschnitt", "lyoner", "lamm-lachs", "lammlachs"),
     ),
     // FISH_SEAFOOD
     FoodConcept(

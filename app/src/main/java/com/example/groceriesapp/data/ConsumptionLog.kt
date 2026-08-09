@@ -7,6 +7,9 @@ import org.json.JSONObject
 enum class ConsumptionReason {
     USED_UP,
     THROWN_AWAY,
+
+    /** Consumed by cooking a recipe; [ConsumptionEvent.recipeId] names which one. */
+    COOKED,
 }
 
 /**
@@ -24,6 +27,10 @@ data class ConsumptionEvent(
     val priceCents: Int? = null,
     val fillLevel: String? = null,
     val reason: ConsumptionReason,
+    /** Set for [ConsumptionReason.COOKED]: which recipe consumed the item. Additive fields —
+     * older builds' loaders skip unknown reasons/keys, so no schema version bump. */
+    val recipeId: String? = null,
+    val recipeTitle: String? = null,
     val addedAtEpochMillis: Long? = null,
     val expiresAtEpochMillis: Long? = null,
     val removedAtEpochMillis: Long,
@@ -46,6 +53,8 @@ internal fun ConsumptionEvent.toJson(): JSONObject = JSONObject()
     .put("priceCents", priceCents ?: JSONObject.NULL)
     .put("fillLevel", fillLevel ?: JSONObject.NULL)
     .put("reason", reason.name)
+    .put("recipeId", recipeId ?: JSONObject.NULL)
+    .put("recipeTitle", recipeTitle ?: JSONObject.NULL)
     .put("addedAtEpochMillis", addedAtEpochMillis ?: JSONObject.NULL)
     .put("expiresAtEpochMillis", expiresAtEpochMillis ?: JSONObject.NULL)
     .put("removedAtEpochMillis", removedAtEpochMillis)
@@ -63,6 +72,8 @@ internal fun JSONObject.toConsumptionEventOrNull(): ConsumptionEvent? = runCatch
         priceCents = if (isNull("priceCents")) null else optInt("priceCents"),
         fillLevel = optStringOrNull("fillLevel"),
         reason = ConsumptionReason.entries.first { it.name == getString("reason") },
+        recipeId = optStringOrNull("recipeId"),
+        recipeTitle = optStringOrNull("recipeTitle"),
         addedAtEpochMillis = if (isNull("addedAtEpochMillis")) null else optLong("addedAtEpochMillis"),
         expiresAtEpochMillis = if (isNull("expiresAtEpochMillis")) null else optLong("expiresAtEpochMillis"),
         removedAtEpochMillis = getLong("removedAtEpochMillis"),

@@ -1,5 +1,9 @@
 package com.example.groceriesapp.ui
 
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.ui.graphics.Color
 import com.example.groceriesapp.data.InventoryItem
 import java.time.Instant
 import java.time.LocalDate
@@ -30,6 +34,30 @@ fun expiryUrgency(
         else -> "Use within $days days"
     }
     return ExpiryUrgency(daysUntil = days, label = label)
+}
+
+/**
+ * Compact urgency wording for dense rows ("Today", "Tomorrow", "3 days left") where [label]'s
+ * imperative phrasing ("Use by tomorrow") would crowd the layout.
+ */
+fun ExpiryUrgency.shortLabel(): String = when {
+    daysUntil < 0 -> "Expired"
+    daysUntil == 0L -> "Today"
+    daysUntil == 1L -> "Tomorrow"
+    else -> "$daysUntil days left"
+}
+
+/**
+ * Colour for urgency text. Lives here rather than in each screen so Home and Inventory can't drift
+ * apart on where "urgent" stops and "soon" begins — they previously carried separate copies of
+ * this ramp.
+ */
+@Composable
+@ReadOnlyComposable
+fun ExpiryUrgency.color(): Color = when {
+    daysUntil <= 1 -> MaterialTheme.colorScheme.error
+    daysUntil <= 3 -> MaterialTheme.colorScheme.tertiary
+    else -> MaterialTheme.colorScheme.onSurfaceVariant
 }
 
 /**

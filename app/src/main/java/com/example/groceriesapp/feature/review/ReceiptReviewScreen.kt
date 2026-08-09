@@ -6,7 +6,6 @@ import android.graphics.Matrix
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -34,27 +33,21 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ReceiptLong
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.CropRotate
 import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.ZoomIn
 import androidx.compose.material.icons.filled.ZoomOut
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -73,6 +66,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -105,31 +99,29 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.example.groceriesapp.data.DigitalReceipt
-import com.example.groceriesapp.data.LocationSource
 import com.example.groceriesapp.data.ReceiptImageEdit
-import com.example.groceriesapp.data.ReceiptItem
-import com.example.groceriesapp.data.ReceiptItemSelection
 import com.example.groceriesapp.data.ReceiptTextRegion
-import com.example.groceriesapp.data.taxonomy.StorageLocation
-import com.example.groceriesapp.data.taxonomy.resolveCategory
-import com.example.groceriesapp.ui.components.InitialsBadge
 import com.example.groceriesapp.ui.components.MerchantBadge
 import com.example.groceriesapp.ui.formatCurrency
-import com.example.groceriesapp.ui.formatQuantity
 import com.example.groceriesapp.ui.formatReceiptTimestamp
 import com.example.groceriesapp.ui.formatDate
 import com.example.groceriesapp.ui.theme.spacing
 import kotlin.math.hypot
 import kotlin.math.max
-import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+/**
+ * The receipt image surface: stitched panorama (or original frames), crop/rotate editing, OCR
+ * rerun, share, rescan, delete. Item review and inventory import moved to
+ * [com.example.groceriesapp.feature.receipts.ImportItemsScreen]; this screen is reached from
+ * Receipt Details via "View receipt".
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ReceiptReviewScreen(
+fun ReceiptViewerScreen(
     receipt: DigitalReceipt,
     expanded: Boolean,
     onBack: () -> Unit,
@@ -138,29 +130,15 @@ fun ReceiptReviewScreen(
     onRescan: () -> Unit,
     onApplyImageEdit: suspend (ReceiptImageEdit) -> Unit,
     onRerunOcr: suspend () -> Unit,
-    onAddItemsToInventory: (List<ReceiptItemSelection>) -> Unit,
-    suggestLocation: (ReceiptItem) -> StorageLocation,
 ) {
     var showDeleteDialog by rememberSaveable { mutableStateOf(false) }
-    var showItemsSheet by rememberSaveable { mutableStateOf(false) }
-    var selectedItemIds by remember(receipt.id) {
-        mutableStateOf(receipt.items.defaultSelectionIds())
-    }
-    // Suggested destination per item; ids the user overrode keep their choice across OCR reruns
-    // and are flagged USER on import so later re-suggestion passes leave them alone.
-    var itemLocations by remember(receipt.id) {
-        mutableStateOf(receipt.items.associate { it.id to suggestLocation(it) })
-    }
-    var userSetLocationIds by remember(receipt.id) { mutableStateOf(emptySet<String>()) }
-    var selectedRegionId by rememberSaveable { mutableStateOf<String?>(null) }
-    var imported by rememberSaveable { mutableStateOf(false) }
+    var overflowMenuOpen by remember { mutableStateOf(false) }
     var showImageEditor by rememberSaveable { mutableStateOf(false) }
     var applyingImageEdit by rememberSaveable { mutableStateOf(false) }
     var imageEditError by rememberSaveable { mutableStateOf<String?>(null) }
     var rerunningOcr by rememberSaveable { mutableStateOf(false) }
     var rerunOcrError by rememberSaveable { mutableStateOf<String?>(null) }
     val coroutineScope = rememberCoroutineScope()
-    val selectedRegion = receipt.regions.firstOrNull { it.id == selectedRegionId }
 
     fun rerunOcr() {
         if (rerunningOcr || receipt.tilePaths.isEmpty()) return
@@ -168,38 +146,11 @@ fun ReceiptReviewScreen(
         rerunOcrError = null
         coroutineScope.launch {
             runCatching { onRerunOcr() }
-                .onSuccess {
-                    imported = false
-                    selectedRegionId = null
-                }
                 .onFailure { error ->
                     rerunOcrError = error.message ?: "Could not recognize this receipt."
                 }
             rerunningOcr = false
         }
-    }
-
-    LaunchedEffect(receipt.items) {
-        selectedItemIds = receipt.items.defaultSelectionIds()
-        itemLocations = receipt.items.associate { item ->
-            item.id to if (item.id in userSetLocationIds) {
-                itemLocations[item.id] ?: suggestLocation(item)
-            } else {
-                suggestLocation(item)
-            }
-        }
-    }
-
-    fun buildSelections(): List<ReceiptItemSelection> = selectedItemIds.map { id ->
-        ReceiptItemSelection(
-            receiptItemId = id,
-            storageLocation = itemLocations[id] ?: StorageLocation.PANTRY,
-            locationSource = if (id in userSetLocationIds) {
-                LocationSource.USER
-            } else {
-                LocationSource.SUGGESTED
-            },
-        )
     }
 
     Scaffold(
@@ -248,57 +199,44 @@ fun ReceiptReviewScreen(
                     IconButton(onClick = onShare) {
                         Icon(Icons.Default.Share, contentDescription = "Share receipt image")
                     }
-                    if (expanded) {
-                        IconButton(onClick = { showDeleteDialog = true }) {
-                            Icon(Icons.Default.DeleteOutline, contentDescription = "Delete receipt")
+                    Box {
+                        IconButton(onClick = { overflowMenuOpen = true }) {
+                            Icon(Icons.Default.MoreVert, contentDescription = "More options")
+                        }
+                        DropdownMenu(
+                            expanded = overflowMenuOpen,
+                            onDismissRequest = { overflowMenuOpen = false },
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Rescan") },
+                                onClick = {
+                                    overflowMenuOpen = false
+                                    onRescan()
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Delete") },
+                                onClick = {
+                                    overflowMenuOpen = false
+                                    showDeleteDialog = true
+                                },
+                            )
                         }
                     }
                 },
             )
         },
-        bottomBar = {
-            if (!expanded) {
-                CompactReviewActions(
-                    itemCount = receipt.items.size,
-                    onRescan = onRescan,
-                    onReview = { showItemsSheet = true },
-                    onDelete = { showDeleteDialog = true },
-                )
-            }
-        },
     ) { innerPadding ->
+        val hasReceiptImage =
+            receipt.tilePaths.isNotEmpty() || receipt.originalFramePaths.isNotEmpty()
         if (expanded) {
-            Row(
+            ReceiptViewer(
+                receipt = receipt,
+                selectedRegion = null,
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(innerPadding),
-            ) {
-                ReceiptViewer(
-                    receipt = receipt,
-                    selectedRegion = selectedRegion,
-                    modifier = Modifier.weight(1.5f).fillMaxHeight(),
-                )
-                ReviewPanel(
-                    receipt = receipt,
-                    selectedItemIds = selectedItemIds,
-                    onSelectionChanged = { selectedItemIds = it },
-                    itemLocations = itemLocations,
-                    onLocationChanged = { itemId, location ->
-                        itemLocations = itemLocations + (itemId to location)
-                        userSetLocationIds = userSetLocationIds + itemId
-                    },
-                    onSelectRegion = { selectedRegionId = it },
-                    imported = imported,
-                    onAdd = {
-                        onAddItemsToInventory(buildSelections())
-                        imported = true
-                    },
-                    onRescan = onRescan,
-                    rerunningOcr = rerunningOcr,
-                    onRerunOcr = ::rerunOcr,
-                    modifier = Modifier.width(390.dp).fillMaxHeight(),
-                )
-            }
+            )
         } else {
             Column(
                 modifier = Modifier
@@ -313,54 +251,20 @@ fun ReceiptReviewScreen(
                         end = MaterialTheme.spacing.medium,
                     ),
                 )
-                FridgeItemsCard(
-                    receipt = receipt,
-                    imported = imported,
-                    onClick = { showItemsSheet = true },
-                    modifier = Modifier.padding(horizontal = MaterialTheme.spacing.medium),
-                )
-                val hasReceiptImage =
-                    receipt.tilePaths.isNotEmpty() || receipt.originalFramePaths.isNotEmpty()
                 ReceiptImageCard(
                     receipt = receipt,
-                    selectedRegion = selectedRegion,
+                    selectedRegion = null,
                     fillAvailable = hasReceiptImage,
                     modifier = Modifier
                         .then(if (hasReceiptImage) Modifier.weight(1f) else Modifier)
                         .fillMaxWidth()
-                        .padding(horizontal = MaterialTheme.spacing.medium),
+                        .padding(
+                            start = MaterialTheme.spacing.medium,
+                            end = MaterialTheme.spacing.medium,
+                            bottom = MaterialTheme.spacing.medium,
+                        ),
                 )
             }
-        }
-    }
-
-    if (showItemsSheet) {
-        ModalBottomSheet(onDismissRequest = { showItemsSheet = false }) {
-            ReviewPanel(
-                receipt = receipt,
-                selectedItemIds = selectedItemIds,
-                onSelectionChanged = { selectedItemIds = it },
-                itemLocations = itemLocations,
-                onLocationChanged = { itemId, location ->
-                    itemLocations = itemLocations + (itemId to location)
-                    userSetLocationIds = userSetLocationIds + itemId
-                },
-                onSelectRegion = {
-                    selectedRegionId = it
-                    showItemsSheet = false
-                },
-                imported = imported,
-                onAdd = {
-                    onAddItemsToInventory(buildSelections())
-                    imported = true
-                },
-                onRescan = onRescan,
-                rerunningOcr = rerunningOcr,
-                onRerunOcr = ::rerunOcr,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .fillMaxHeight(0.86f),
-            )
         }
     }
 
@@ -441,9 +345,17 @@ private fun ReceiptImageEditorSheet(
     onApply: (ReceiptImageEdit) -> Unit,
 ) {
     val initial = receipt.imageEdit
-    var rotationDegrees by rememberSaveable(receipt.id) {
-        mutableFloatStateOf(initial.rotationDegrees)
+    // The stored angle splits into coarse quarter turns (the 90°/180° buttons) plus a fine
+    // straightening offset (the slider), so both stay independently adjustable.
+    var quarterTurns by rememberSaveable(receipt.id) {
+        mutableIntStateOf((initial.rotationDegrees / 90f).roundToInt().mod(4))
     }
+    var fineRotationDegrees by rememberSaveable(receipt.id) {
+        mutableFloatStateOf(
+            initial.rotationDegrees - (initial.rotationDegrees / 90f).roundToInt() * 90f,
+        )
+    }
+    val rotationDegrees = normalizeRotationDegrees(quarterTurns * 90f + fineRotationDegrees)
     var cropLeft by rememberSaveable(receipt.id) { mutableFloatStateOf(initial.cropLeft) }
     var cropTop by rememberSaveable(receipt.id) { mutableFloatStateOf(initial.cropTop) }
     var cropRight by rememberSaveable(receipt.id) { mutableFloatStateOf(initial.cropRight) }
@@ -531,22 +443,50 @@ private fun ReceiptImageEditorSheet(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text("Rotation", style = MaterialTheme.typography.titleMedium)
-                    TextButton(onClick = { rotationDegrees = 0f }) {
+                    TextButton(
+                        onClick = {
+                            quarterTurns = 0
+                            fineRotationDegrees = 0f
+                        },
+                    ) {
                         Text("${"%.1f".format(rotationDegrees)}°")
                     }
                 }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small),
+                ) {
+                    OutlinedButton(
+                        onClick = { quarterTurns = (quarterTurns + 3).mod(4) },
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Text("↺ 90°")
+                    }
+                    OutlinedButton(
+                        onClick = { quarterTurns = (quarterTurns + 2).mod(4) },
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Text("180°")
+                    }
+                    OutlinedButton(
+                        onClick = { quarterTurns = (quarterTurns + 1).mod(4) },
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Text("↻ 90°")
+                    }
+                }
                 Slider(
-                    value = rotationDegrees,
-                    onValueChange = { rotationDegrees = it.coerceIn(-90f, 90f) },
-                    valueRange = -90f..90f,
+                    value = fineRotationDegrees,
+                    onValueChange = { fineRotationDegrees = it.coerceIn(-45f, 45f) },
+                    valueRange = -45f..45f,
                 )
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
-                    Text("−90°", style = MaterialTheme.typography.labelSmall)
-                    Text("0°", style = MaterialTheme.typography.labelSmall)
-                    Text("+90°", style = MaterialTheme.typography.labelSmall)
+                    Text("−45°", style = MaterialTheme.typography.labelSmall)
+                    Text("Fine straightening", style = MaterialTheme.typography.labelSmall)
+                    Text("+45°", style = MaterialTheme.typography.labelSmall)
                 }
             }
 
@@ -564,7 +504,8 @@ private fun ReceiptImageEditorSheet(
             ) {
                 TextButton(
                     onClick = {
-                        rotationDegrees = 0f
+                        quarterTurns = 0
+                        fineRotationDegrees = 0f
                         cropLeft = 0f
                         cropTop = 0f
                         cropRight = 1f
@@ -749,6 +690,12 @@ private fun createRotatedPreviewBitmap(
     )
 }
 
+/** Wraps any angle into (-180, 180] so quarter turns plus fine straightening stay canonical. */
+private fun normalizeRotationDegrees(value: Float): Float {
+    val wrapped = ((value % 360f) + 360f) % 360f
+    return if (wrapped > 180f) wrapped - 360f else wrapped
+}
+
 private data class CropFractions(
     val left: Float,
     val top: Float,
@@ -863,7 +810,7 @@ private fun ReceiptHeader(
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
-                formatReceiptTimestamp(receipt.dateEpochMillis ?: receipt.createdAtEpochMillis),
+                formatReceiptTimestamp(receipt.dateEpochMillis, receipt.createdAtEpochMillis),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -882,94 +829,6 @@ private fun ReceiptHeader(
         }
     }
 }
-
-/**
- * Summary of the receipt's grocery items. The heading only claims the items reached the
- * fridge once they actually have been added to the inventory.
- */
-@Composable
-private fun FridgeItemsCard(
-    receipt: DigitalReceipt,
-    imported: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val items = receipt.items
-    Card(
-        modifier = modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainer,
-        ),
-    ) {
-        Column(
-            modifier = Modifier.padding(MaterialTheme.spacing.medium),
-            verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small),
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    if (imported) "Items Added to Fridge" else "Items on This Receipt",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                )
-                if (items.isNotEmpty()) {
-                    Surface(
-                        shape = CircleShape,
-                        color = MaterialTheme.colorScheme.primary,
-                        contentColor = MaterialTheme.colorScheme.onPrimary,
-                    ) {
-                        Text(
-                            "${items.size} ${if (items.size == 1) "item" else "items"}",
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                        )
-                    }
-                }
-            }
-            if (items.isEmpty()) {
-                Text(
-                    "No grocery items recognized yet. Open the review sheet to check the text.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            } else {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    items.take(FRIDGE_PREVIEW_COUNT).forEach { item ->
-                        InitialsBadge(item.name, size = 44.dp)
-                    }
-                    val overflow = items.size - FRIDGE_PREVIEW_COUNT
-                    if (overflow > 0) {
-                        Surface(
-                            shape = CircleShape,
-                            color = MaterialTheme.colorScheme.surfaceContainerHighest,
-                            modifier = Modifier.size(44.dp),
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Text(
-                                    "+$overflow",
-                                    style = MaterialTheme.typography.labelLarge,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-private const val FRIDGE_PREVIEW_COUNT = 5
 
 @Composable
 private fun ReceiptImageCard(
@@ -1033,280 +892,6 @@ private fun ReceiptImageCard(
     }
 }
 
-@Composable
-private fun CompactReviewActions(
-    itemCount: Int,
-    onRescan: () -> Unit,
-    onReview: () -> Unit,
-    onDelete: () -> Unit,
-) {
-    Surface(
-        modifier = Modifier.navigationBarsPadding(),
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        tonalElevation = 3.dp,
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(MaterialTheme.spacing.medium),
-            horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small),
-        ) {
-            OutlinedButton(onClick = onRescan, modifier = Modifier.weight(1f)) {
-                Text("Rescan")
-            }
-            Button(onClick = onReview, modifier = Modifier.weight(1f)) {
-                Text(if (itemCount == 0) "View Text" else "Edit Items")
-            }
-            OutlinedButton(
-                onClick = onDelete,
-                modifier = Modifier.weight(1f),
-                colors = ButtonDefaults.outlinedButtonColors(
-                    contentColor = MaterialTheme.colorScheme.error,
-                ),
-            ) {
-                Text("Delete")
-            }
-        }
-    }
-}
-
-@Composable
-private fun ReviewPanel(
-    receipt: DigitalReceipt,
-    selectedItemIds: Set<String>,
-    onSelectionChanged: (Set<String>) -> Unit,
-    itemLocations: Map<String, StorageLocation>,
-    onLocationChanged: (String, StorageLocation) -> Unit,
-    onSelectRegion: (String?) -> Unit,
-    imported: Boolean,
-    onAdd: () -> Unit,
-    onRescan: () -> Unit,
-    rerunningOcr: Boolean,
-    onRerunOcr: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Column(
-        modifier = modifier
-            .background(MaterialTheme.colorScheme.surfaceContainerLow)
-            .padding(MaterialTheme.spacing.medium),
-        verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small),
-    ) {
-        Text("Recognized info", style = MaterialTheme.typography.titleLarge)
-        Card(
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainer,
-            ),
-        ) {
-            Column(
-                modifier = Modifier.padding(MaterialTheme.spacing.medium),
-                verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small),
-            ) {
-                InfoRow("Merchant", receipt.merchant ?: "Needs review")
-                InfoRow("Date", formatDate(receipt.dateEpochMillis))
-                InfoRow("Total", formatCurrency(receipt.totalCents, receipt.currency))
-            }
-        }
-
-        Text(
-            "${receipt.items.size} grocery ${
-                if (receipt.items.size == 1) "item" else "items"
-            }",
-            style = MaterialTheme.typography.titleMedium,
-        )
-        if (receipt.items.isEmpty()) {
-            Card(
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.errorContainer,
-                ),
-            ) {
-                Row(
-                    modifier = Modifier.padding(MaterialTheme.spacing.medium),
-                    horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(Icons.Default.Warning, contentDescription = null)
-                    Text(
-                        "No grocery rows were confidently parsed. The original receipt and raw OCR are still saved.",
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                }
-            }
-        }
-        LazyColumn(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            if (receipt.items.isNotEmpty()) {
-                items(receipt.items, key = ReceiptItem::id) { item ->
-                    ReviewItemRow(
-                        item = item,
-                        selected = item.id in selectedItemIds,
-                        onSelectedChanged = { selected ->
-                            onSelectionChanged(
-                                if (selected) selectedItemIds + item.id
-                                else selectedItemIds - item.id,
-                            )
-                        },
-                        location = itemLocations[item.id],
-                        onLocationChange = { onLocationChanged(item.id, it) },
-                        onLocate = { onSelectRegion(item.textRegionId) },
-                    )
-                }
-            }
-            item(key = "raw-ocr") {
-                Column(
-                    modifier = Modifier.padding(top = MaterialTheme.spacing.small),
-                    verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.extraSmall),
-                ) {
-                    Text(
-                        "Raw OCR text",
-                        style = MaterialTheme.typography.titleSmall,
-                    )
-                    Text(
-                        receipt.rawText.ifBlank { "No text recognized." },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-        }
-
-        Button(
-            onClick = onAdd,
-            enabled = selectedItemIds.isNotEmpty() && !imported,
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Icon(if (imported) Icons.Default.Check else Icons.Default.Add, contentDescription = null)
-            Spacer(Modifier.width(8.dp))
-            Text(if (imported) "Added to fridge" else "Add selected to fridge")
-        }
-        TextButton(onClick = onRescan, modifier = Modifier.fillMaxWidth()) {
-            Text("Rescan receipt")
-        }
-        OutlinedButton(
-            onClick = onRerunOcr,
-            enabled = receipt.tilePaths.isNotEmpty() && !rerunningOcr,
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            if (rerunningOcr) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(18.dp),
-                    strokeWidth = 2.dp,
-                )
-            } else {
-                Icon(Icons.Default.Refresh, contentDescription = null)
-            }
-            Spacer(Modifier.width(8.dp))
-            Text(if (rerunningOcr) "Running OCR…" else "Run OCR again")
-        }
-    }
-}
-
-@Composable
-private fun ReviewItemRow(
-    item: ReceiptItem,
-    selected: Boolean,
-    onSelectedChanged: (Boolean) -> Unit,
-    location: StorageLocation?,
-    onLocationChange: (StorageLocation) -> Unit,
-    onLocate: () -> Unit,
-) {
-    // Household goods and unrecognized rows can be imported, but a storage location is
-    // meaningless for them, so the chip only appears on food rows.
-    val supportsStorage = resolveCategory(item.category, item.name).supportsExpiry
-    Card(
-        colors = CardDefaults.cardColors(
-            containerColor = if (selected) {
-                MaterialTheme.colorScheme.secondaryContainer
-            } else {
-                MaterialTheme.colorScheme.surfaceContainer
-            },
-        ),
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Checkbox(checked = selected, onCheckedChange = onSelectedChanged)
-            Column(modifier = Modifier.weight(1f)) {
-                Text(item.name, style = MaterialTheme.typography.titleSmall)
-                Text(
-                    "${formatQuantity(item.quantity)} ${item.unit.orEmpty()} • " +
-                        resolveCategory(item.category, item.name).displayName,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                if (item.needsReview) {
-                    Text(
-                        "Needs review — select to confirm",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.tertiary,
-                    )
-                }
-                if (selected && supportsStorage && location != null) {
-                    var locationMenuOpen by remember { mutableStateOf(false) }
-                    Box {
-                        AssistChip(
-                            onClick = { locationMenuOpen = true },
-                            label = { Text(location.displayName) },
-                            trailingIcon = {
-                                Icon(
-                                    Icons.Default.ArrowDropDown,
-                                    contentDescription = "Change storage location",
-                                )
-                            },
-                        )
-                        DropdownMenu(
-                            expanded = locationMenuOpen,
-                            onDismissRequest = { locationMenuOpen = false },
-                        ) {
-                            StorageLocation.entries.forEach { option ->
-                                DropdownMenuItem(
-                                    text = { Text(option.displayName) },
-                                    onClick = {
-                                        onLocationChange(option)
-                                        locationMenuOpen = false
-                                    },
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-            Text(
-                formatCurrency(item.priceCents),
-                style = MaterialTheme.typography.labelLarge,
-            )
-            IconButton(
-                onClick = onLocate,
-                enabled = item.textRegionId != null,
-            ) {
-                Icon(
-                    Icons.Default.Search,
-                    contentDescription = "Locate ${item.name} in receipt",
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun InfoRow(label: String, value: String) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-    ) {
-        Text(
-            label,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Text(value, style = MaterialTheme.typography.labelLarge)
-    }
-}
-
 private data class ReceiptTileMetadata(
     val path: String,
     val width: Int,
@@ -1341,6 +926,7 @@ private fun ReceiptViewer(
                     horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small),
                 ) {
                     FilterChip(
+                        modifier = Modifier.minimumInteractiveComponentSize(),
                         selected = !showOriginals,
                         onClick = { showOriginals = false },
                         label = { Text("Digital receipt") },
@@ -1353,6 +939,7 @@ private fun ReceiptViewer(
                         },
                     )
                     FilterChip(
+                        modifier = Modifier.minimumInteractiveComponentSize(),
                         selected = showOriginals,
                         onClick = { showOriginals = true },
                         label = { Text("Original frames (${receipt.originalFramePaths.size})") },
@@ -1665,22 +1252,3 @@ private fun ReceiptTileImage(
     }
 }
 
-/**
- * Bottle/container deposit lines (e.g. "Pfand Fl") are real receipt rows but not groceries, so they
- * default to unselected. Local scans already drop these during parsing (see
- * [com.example.groceriesapp.vision.parsing.ReceiptParser]'s NON_ITEM_LABELS), but imported receipts
- * such as BIO COMPANY orders carry item names verbatim from the source API and skip that filter.
- */
-private fun ReceiptItem.isDepositLine(): Boolean = name.contains("pfand", ignoreCase = true)
-
-/**
- * Items pre-ticked for import: confidently parsed food rows. Deposit lines, rows needing review,
- * and non-food rows (household goods, unrecognized text) start unchecked — "don't add" by default,
- * one tap to include anyway.
- */
-private fun List<ReceiptItem>.defaultSelectionIds(): Set<String> = this
-    .filterNot(ReceiptItem::needsReview)
-    .filterNot(ReceiptItem::isDepositLine)
-    .filter { resolveCategory(it.category, it.name).supportsExpiry }
-    .map(ReceiptItem::id)
-    .toSet()

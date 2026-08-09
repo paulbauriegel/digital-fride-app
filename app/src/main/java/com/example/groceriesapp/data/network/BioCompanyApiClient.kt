@@ -1,5 +1,6 @@
 package com.example.groceriesapp.data.network
 
+import android.util.Log
 import okhttp3.HttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -18,6 +19,7 @@ import javax.crypto.spec.SecretKeySpec
 
 class BioCompanyApiClient {
     companion object {
+        private const val TAG = "BioCompanyApi"
         private const val BASE_URL = "https://connect.biocompany.de/"
         // AES-128-CBC: key = REDACTED iv = REDACTED
         private val CIPHER_KEY = ByteArray(16) // removed from the public history, 0x37.toByte(), 0x78.toByte(), 0x21.toByte(),
@@ -79,6 +81,7 @@ class BioCompanyApiClient {
         val custNum = customerNumber!!
         val request = buildAuthRequest("GET", "receipts/$custNum")
         val raw = client.newCall(request).execute().use { response -> response.body?.string() ?: throw IOException("Empty response") }
+        Log.d(TAG, "Receipt list response:\n$raw")
         val arr: JSONArray
         if (raw.trimStart().length > 0 && raw.trimStart()[0] == '['.toChar()) {
             arr = JSONArray(raw)
@@ -116,6 +119,9 @@ class BioCompanyApiClient {
         val response = client.newCall(request).execute().use { r ->
             r.body?.string() ?: throw IOException("Empty response")
         }
+        // The list endpoint's `date` is date-only, so every imported receipt lands on midnight.
+        // Logged to see whether the detail payload carries a checkout time we currently discard.
+        Log.d(TAG, "Receipt detail response:\n$response")
         val detailJson = JSONObject(response)
         val items = buildList {
             val itemsArr = detailJson.optJSONArray("receipts")

@@ -71,8 +71,9 @@ data class ReceiptImageEdit(
     val cropBottom: Float = 1f,
 ) {
     init {
-        require(rotationDegrees.isFinite() && rotationDegrees in -90f..90f) {
-            "Rotation must be between -90 and 90 degrees."
+        // Quarter turns plus fine straightening span the full circle, canonically (-180, 180].
+        require(rotationDegrees.isFinite() && rotationDegrees in -180f..180f) {
+            "Rotation must be between -180 and 180 degrees."
         }
         require(
             listOf(cropLeft, cropTop, cropRight, cropBottom).all {
@@ -85,6 +86,43 @@ data class ReceiptImageEdit(
         require(cropBottom - cropTop >= 0.05f) { "Crop height must be at least 5%." }
     }
 }
+
+/** What became of the goods a receipt line was imported as, as far as the app can tell. */
+enum class ImportDisposition {
+    IN_INVENTORY,
+    USED_UP,
+    THROWN_AWAY,
+    COOKED,
+
+    /** Imported at some point; the app cannot say by whom, or where it ended up. */
+    UNKNOWN,
+    ;
+
+    /**
+     * Whether the goods are physically gone. Releasing a record makes its line importable again, so
+     * only records whose goods might still be sitting somewhere are ever eligible.
+     */
+    val goodsAreGone: Boolean
+        get() = this == USED_UP || this == THROWN_AWAY || this == COOKED
+}
+
+/**
+ * One receipt line's import record. Its mere presence blocks re-import everywhere — in every
+ * household, and forever once the goods are gone. [householdId] and [disposition] are provenance
+ * for the user to read, not policy: nothing consults them to decide whether a line may be imported.
+ *
+ * Per receipt *line*, not per unit. "3 × Joghurt" is three lines but one inventory row, so all
+ * three take that row's disposition — eat two and bin one and all three read THROWN_AWAY. Coarse
+ * on purpose; splitting records per unit would buy a better label and nothing else.
+ */
+data class ReceiptItemImport(
+    val receiptItemId: String,
+    /** Null when unattributable (legacy backfill) or when the owning household was deleted. */
+    val householdId: String? = null,
+    val importedAtEpochMillis: Long? = null,
+    val disposition: ImportDisposition = ImportDisposition.UNKNOWN,
+    val dispositionChangedAtEpochMillis: Long? = null,
+)
 
 data class DigitalReceipt(
     val id: String = UUID.randomUUID().toString(),
@@ -108,11 +146,31 @@ data class DigitalReceipt(
     val bioCompanyReceiptNumber: Int? = null,
     val bioCompanyCheckout: Int? = null,
     val reweReceiptId: String? = null,
+    /**
+     * Import provenance, one record per [ReceiptItem] that has been added to some household's
+     * inventory. Persisted on the receipt — which is shared device-wide, unlike inventory — so the
+     * imported/not-imported split holds across every household and survives the inventory row
+     * later being consumed or removed.
+     *
+     * Deliberately unvalidated in [init]: a duplicate or malformed entry here must never throw,
+     * because the loader drops a whole receipt whose parse fails.
+     */
+    val imports: List<ReceiptItemImport> = emptyList(),
 ) {
     init {
         require(id.isNotBlank()) { "Receipt ID must not be blank." }
         require(currency.isNotBlank()) { "Currency must not be blank." }
     }
+
+    /**
+     * The ids alone — what the import filters and the imported/not-imported UI split ask for.
+     * Computed rather than stored, so it can never disagree with [imports].
+     */
+    val importedItemIds: Set<String>
+        get() = imports.mapTo(LinkedHashSet(imports.size), ReceiptItemImport::receiptItemId)
+
+    fun importOf(receiptItemId: String): ReceiptItemImport? =
+        imports.firstOrNull { it.receiptItemId == receiptItemId }
 }
 
 /** How an [InventoryItem.storageLocation] came to be set. */
@@ -185,7 +243,7 @@ val InventoryItem.isCountable: Boolean
     get() = quantity % 1.0 == 0.0 &&
         unit?.trim()?.lowercase() in COUNTABLE_UNITS
 
-private val COUNTABLE_UNITS = setOf("pc", "pcs", "st", "st.", "stk", "stk.", "stück", "x")
+internal val COUNTABLE_UNITS = setOf("pc", "pcs", "st", "st.", "stk", "stk.", "stück", "x")
 
 data class ScanSession(
     val id: String,

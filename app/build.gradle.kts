@@ -47,6 +47,11 @@ android {
         resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
         jniLibs.useLegacyPackaging = true
     }
+
+    testOptions {
+        // Lets android.util.Log no-op in unit tests (FallbackReceiptItemExtractor logs fallbacks).
+        unitTests.isReturnDefaultValues = true
+    }
 }
 
 dependencies {
@@ -63,7 +68,7 @@ dependencies {
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material3:material3-window-size-class")
-    implementation("androidx.compose.material:material-icons-extended:1.7.8")
+    implementation("androidx.compose.material:material-icons-extended")
     debugImplementation("androidx.compose.ui:ui-tooling")
 
     implementation("com.google.ar:core:1.45.0")
@@ -72,6 +77,7 @@ dependencies {
 
     implementation("com.google.mlkit:text-recognition:16.0.1")
     implementation("com.google.ai.edge.litert:litert:2.1.6")
+    implementation("com.google.ai.edge.litertlm:litertlm-android:0.14.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("androidx.security:security-crypto:1.1.0-alpha06")

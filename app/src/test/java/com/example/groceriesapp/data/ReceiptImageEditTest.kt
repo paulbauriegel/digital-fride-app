@@ -20,18 +20,20 @@ class ReceiptImageEditTest {
     }
 
     @Test
-    fun rotationAcceptsFullSliderRange() {
+    fun rotationAcceptsQuarterTurnsPlusFineStraightening() {
         ReceiptImageEdit(rotationDegrees = -90f)
         ReceiptImageEdit(rotationDegrees = 90f)
+        ReceiptImageEdit(rotationDegrees = 180f)
+        ReceiptImageEdit(rotationDegrees = -135.5f)
     }
 
     @Test
-    fun rotationRejectsValuesOutsideSliderRange() {
+    fun rotationRejectsValuesOutsideHalfTurn() {
         assertThrows(IllegalArgumentException::class.java) {
-            ReceiptImageEdit(rotationDegrees = 90.01f)
+            ReceiptImageEdit(rotationDegrees = 180.01f)
         }
         assertThrows(IllegalArgumentException::class.java) {
-            ReceiptImageEdit(rotationDegrees = -90.01f)
+            ReceiptImageEdit(rotationDegrees = -180.01f)
         }
     }
 

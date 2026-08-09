@@ -4,6 +4,19 @@ import com.example.groceriesapp.R
 
 // Generated from the curated concept catalogue. Icon artwork: OpenMoji (CC BY-SA 4.0).
 internal val householdConcepts: List<FoodConcept> = listOf(
+    // DEPOSIT
+    FoodConcept(
+        id = "PFAND",
+        category = GroceryCategory.DEPOSIT,
+        displayName = "Deposit",
+        iconRes = R.drawable.ic_food_pfand,
+        // Local OCR scans already drop Pfand lines entirely (see ReceiptParser.NON_ITEM_LABELS);
+        // these keywords are what classifies the ones that survive — imported receipts (BIO
+        // COMPANY, REWE) carry item names verbatim from the source API and skip that filter.
+        // "leergut"/"leerg." catch reusable-packaging deposit lines, which don't say "Pfand" at
+        // all (e.g. receipt-abbreviated "Leerg. MW V. ST" — returnable multi-use packaging).
+        keywords = listOf("pfand", "leergut", "leerg."),
+    ),
     // HOUSEHOLD
     FoodConcept(
         id = "DISH_SOAP",
@@ -109,6 +122,15 @@ internal val householdConcepts: List<FoodConcept> = listOf(
         displayName = "Batteries",
         iconRes = R.drawable.ic_food_batteries,
         keywords = listOf("batterie"),
+    ),
+    FoodConcept(
+        id = "LIGHTER",
+        category = GroceryCategory.HOUSEHOLD,
+        displayName = "Lighter",
+        // No dedicated artwork; batteries is the closest small-gadget icon among the bundled set.
+        iconRes = R.drawable.ic_food_batteries,
+        // "feuerzeug" alone also catches "Stabfeuerzeug" (long-neck lighter) as a substring.
+        keywords = listOf("feuerzeug"),
     ),
     FoodConcept(
         id = "CARRIER_BAG",

@@ -122,7 +122,7 @@ private fun ConnectedCard(
                         else -> Icons.Default.CloudCircle
                     }
                     Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(4.dp))
+                    Spacer(Modifier.width(MaterialTheme.spacing.extraSmall))
                     Text(
                         when (syncState) {
                             is ReweRepository.SyncState.FETCHING -> "Fetching..."
@@ -138,7 +138,7 @@ private fun ConnectedCard(
                         modifier = Modifier.size(18.dp),
                         tint = MaterialTheme.colorScheme.error,
                     )
-                    Spacer(Modifier.width(4.dp))
+                    Spacer(Modifier.width(MaterialTheme.spacing.extraSmall))
                     Text("Disconnect", color = MaterialTheme.colorScheme.error)
                 }
             }
@@ -164,7 +164,7 @@ private fun ConnectedCard(
                             contentDescription = null,
                             modifier = Modifier.size(18.dp),
                         )
-                        Spacer(Modifier.width(4.dp))
+                        Spacer(Modifier.width(MaterialTheme.spacing.extraSmall))
                         Text("Review & Import")
                     }
                 }
@@ -270,7 +270,7 @@ private fun SetupCard(
                             color = MaterialTheme.colorScheme.error,
                             modifier = Modifier.weight(1f),
                         )
-                        Spacer(Modifier.width(8.dp))
+                        Spacer(Modifier.width(MaterialTheme.spacing.small))
                     }
                     else -> Unit
                 }
@@ -284,7 +284,7 @@ private fun SetupCard(
                         contentDescription = null,
                         modifier = Modifier.size(18.dp),
                     )
-                    Spacer(Modifier.width(4.dp))
+                    Spacer(Modifier.width(MaterialTheme.spacing.extraSmall))
                     Text("Sign in with REWE")
                 }
             }

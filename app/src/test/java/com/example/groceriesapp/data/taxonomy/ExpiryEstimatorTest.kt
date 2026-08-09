@@ -89,7 +89,11 @@ class ExpiryEstimatorTest {
 
     @Test
     fun nonFoodCategoriesNeverGetAnEstimate() {
-        listOf(GroceryCategory.HOUSEHOLD, GroceryCategory.OTHER).forEach { category ->
+        listOf(
+            GroceryCategory.HOUSEHOLD,
+            GroceryCategory.DEPOSIT,
+            GroceryCategory.OTHER,
+        ).forEach { category ->
             assertNull(
                 "$category should not expire",
                 estimator.estimate(
@@ -166,6 +170,48 @@ class ExpiryEstimatorTest {
         assertNotNull(estimate)
         val days = (estimate!!.expiresAtEpochMillis - purchased) / day
         assertTrue("fresh milk estimated at $days days", days in 1..21)
+    }
+
+    /**
+     * Reported 2026-08-09: a potted, living basil plant ("Basilikum im Topf") was estimated the
+     * same as cut basil leaves, even though it keeps for weeks on a windowsill rather than days
+     * in the fridge.
+     */
+    @Test
+    fun pottedHerbOutlastsCutHerbs() {
+        val catalogFile = listOf(
+            java.io.File("src/main/assets/shelf_life_rules.json"),
+            java.io.File("app/src/main/assets/shelf_life_rules.json"),
+        ).first(java.io.File::isFile)
+        val realCatalog = ShelfLifeCatalog(ShelfLifeCatalog.parse(catalogFile.readText()))
+        val real = ExpiryEstimator(realCatalog)
+
+        // A bare pantryDays rule (no fridge figures) routes a VEGETABLES item to the pantry —
+        // the same suggestion the repository would make when adding this item.
+        val pottedLocation = StorageLocationSuggester.suggest(
+            category = GroceryCategory.VEGETABLES,
+            conceptRule = realCatalog.conceptRule("HERBS_POTTED"),
+        )
+        assertEquals(StorageLocation.PANTRY, pottedLocation)
+
+        val potted = real.estimate(
+            foodConceptId = "HERBS_POTTED",
+            categoryStorageValue = GroceryCategory.VEGETABLES.name,
+            purchasedAtEpochMillis = purchased,
+            location = pottedLocation,
+        )
+        val cut = real.estimate(
+            foodConceptId = "HERBS_FRESH",
+            categoryStorageValue = GroceryCategory.VEGETABLES.name,
+            purchasedAtEpochMillis = purchased,
+        )
+
+        assertNotNull(potted)
+        assertNotNull(cut)
+        assertTrue(
+            "a potted plant should outlast cut herbs",
+            potted!!.expiresAtEpochMillis > cut!!.expiresAtEpochMillis,
+        )
     }
 
     @Test

@@ -6,12 +6,11 @@ import com.example.groceriesapp.data.ReceiptStatus
 import com.example.groceriesapp.data.ReceiptTextRegion
 import com.example.groceriesapp.vision.editing.ReceiptImageEditor
 import com.example.groceriesapp.vision.parsing.ParsedLineItem
-import com.example.groceriesapp.vision.parsing.ReceiptParser
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import com.example.groceriesapp.vision.parsing.ReceiptItemExtractor
+import com.example.groceriesapp.vision.parsing.RulesReceiptItemExtractor
 
 class ReceiptOcrRerunner(
-    private val parser: ReceiptParser = ReceiptParser(),
+    private val itemExtractor: ReceiptItemExtractor = RulesReceiptItemExtractor(),
     private val recognizer: ReceiptOcrRecognizer = MlKitReceiptOcrRecognizer(),
     private val projectRegions: suspend (
         DigitalReceipt,
@@ -40,7 +39,7 @@ class ReceiptOcrRerunner(
                 previewPath = inputPreviewPath,
             ),
         )
-        val parsed = withContext(Dispatchers.Default) { parser.parse(ocr.rawText) }
+        val parsed = itemExtractor.extract(ocr.rawText)
         val recognizedRegions = ocr.regions.map(OcrRegion::toReceiptTextRegion)
         val sourceRegions: List<ReceiptTextRegion>
         val displayedRegions: List<ReceiptTextRegion>

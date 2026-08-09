@@ -257,4 +257,108 @@ class FoodConceptCatalogTest {
         assertEquals("PEAS", FoodConceptCatalog.match("Erbsen")?.id)
         assertEquals("SPICE_MIX", FoodConceptCatalog.match("Curry")?.id)
     }
+
+    /** Reported 2026-08-08: "ALPRO SOJA VAN." (Alpro soya milk, vanilla) matched nothing. */
+    @Test
+    fun brandedSoyDrinkResolvesToPlantMilk() {
+        assertEquals("PLANT_MILK", FoodConceptCatalog.match("ALPRO SOJA VAN.")?.id)
+    }
+
+    /**
+     * Reported 2026-08-09: "Alpro soya" still matched nothing — the German-spelling fix above
+     * ("alpro soja") doesn't cover Alpro's own English-language branding ("Alpro Soya").
+     */
+    @Test
+    fun englishSpelledSoyaDrinkResolvesToPlantMilk() {
+        assertEquals("PLANT_MILK", FoodConceptCatalog.match("Alpro soya")?.id)
+        assertEquals("PLANT_MILK", FoodConceptCatalog.match("Soya Drink")?.id)
+    }
+
+    /** Reported 2026-08-09: "pamigani Regg" (OCR-garbled "Parmigiano Reggiano") matched nothing. */
+    @Test
+    fun garbledParmigianoReggianoResolvesToHardCheese() {
+        assertEquals("CHEESE_HARD", FoodConceptCatalog.match("pamigani Regg")?.id)
+        assertEquals("CHEESE_HARD", FoodConceptCatalog.match("Parmigiano Reggiano")?.id)
+    }
+
+    /**
+     * Reported 2026-08-09 from real inventory: a frozen prepared dish, a branded soft drink and a
+     * branded tea all matched nothing (→ OTHER), and a potted living herb plant was classified the
+     * same as cut herbs even though it keeps for weeks rather than days.
+     */
+    @Test
+    fun brandedAndPreparedProductsFoundOnRealReceipts() {
+        val samples = mapOf(
+            "MEXICAN CHICKEN" to "READY_MEAL",
+            "Bundaberg Ginger" to "GINGER_BEER",
+            "Yogi Tea classic" to "TEA",
+            "Basilikum im Topf" to "HERBS_POTTED",
+            // Receipt truncation dropping the trailing "f" must still resolve correctly.
+            "Basilikum im Top" to "HERBS_POTTED",
+        )
+        samples.forEach { (name, expectedId) ->
+            assertEquals("\"$name\"", expectedId, FoodConceptCatalog.match(name)?.id)
+        }
+        // Cut basil (no pot) must still resolve to the shorter-lived HERBS_FRESH on its own.
+        assertEquals("HERBS_FRESH", FoodConceptCatalog.match("Basilikum")?.id)
+    }
+
+    /** Reported 2026-08-09: "Pfand" (bottle deposit) needs its own category, not OTHER. */
+    @Test
+    fun depositLinesGetTheirOwnCategory() {
+        val concept = FoodConceptCatalog.match("Pfand 0,25")
+        assertEquals("PFAND", concept?.id)
+        assertEquals(GroceryCategory.DEPOSIT, concept?.category)
+        assertTrue("a deposit fee has no shelf life", !GroceryCategory.DEPOSIT.supportsExpiry)
+    }
+
+    /** Reported 2026-08-09: "5-Fruchtcocktail" (canned fruit pieces) matched nothing. */
+    @Test
+    fun cannedFruitCocktailResolvesToCannedFruitNotCompote() {
+        val concept = FoodConceptCatalog.match("5-Fruchtcocktail")
+        assertEquals("CANNED_FRUIT", concept?.id)
+        assertEquals(GroceryCategory.CANNED_JARRED, concept?.category)
+        // A distinct product from applesauce/Kompott, which must still resolve to COMPOTE alone.
+        assertEquals("COMPOTE", FoodConceptCatalog.match("Kompott")?.id)
+    }
+
+    /** Reported 2026-08-09: "Mini Mix classic" (ice cream on a stick multipack) matched nothing. */
+    @Test
+    fun miniMixResolvesToIceCream() {
+        assertEquals("ICE_CREAM", FoodConceptCatalog.match("Mini Mix classic")?.id)
+    }
+
+    /**
+     * Reported 2026-08-09, a second batch from real receipts: an OCR misread, several truncated
+     * or abbreviated product names, and three products (vegan sausage, Halloumi, barbecue sauce)
+     * the catalogue had no concept for at all.
+     */
+    @Test
+    fun secondBatchOfRealReceiptGaps() {
+        val samples = mapOf(
+            // OCR misread: "g" read as "b" in "Fruchtgummi".
+            "fruchtbumi" to "CANDY",
+            "Huehnerfrikasse" to "READY_MEAL",
+            "Jonagold Bio" to "APPLE",
+            // Receipt abbreviation for "Hähnchen Innenfilet" (chicken tenderloin).
+            "HA-INNENFILET" to "CHICKEN",
+            "vegane Bratw." to "VEGAN_SAUSAGE",
+            "Halloumi" to "HALLOUMI",
+            "Barbecue sauce" to "BARBECUE_SAUCE",
+            // Receipt abbreviation for "Leergut Mehrweg Verpackung Stück" (returnable packaging).
+            "Leerg. MW V. ST" to "PFAND",
+            // Truncated "Mehrkornbaguette".
+            "MehrkornBag" to "BAGUETTE",
+            "Stabfeuerzeug" to "LIGHTER",
+            "Bionade Holunder" to "SOFT_DRINK",
+        )
+        samples.forEach { (name, expectedId) ->
+            assertEquals("\"$name\"", expectedId, FoodConceptCatalog.match(name)?.id)
+        }
+        // A truncated *real* bratwurst — no "vegane" qualifier — must not be caught as vegan.
+        assertNull(FoodConceptCatalog.match("Bratw."))
+        assertEquals("SAUSAGE", FoodConceptCatalog.match("Bratwurst")?.id)
+        // A generic tenderloin cut, with no "HA-" prefix, must not default to chicken.
+        assertNull(FoodConceptCatalog.match("Innenfilet"))
+    }
 }

@@ -1,0 +1,860 @@
+{
+  "schemaVersion": 1,
+  "recipes": [
+    {
+      "id": "tomato_soup",
+      "title": "Tomato Soup",
+      "servings": 2,
+      "prepMinutes": 15,
+      "tags": ["vegetarian", "quick", "soup"],
+      "image": null,
+      "ingredients": [
+        {"conceptId": "CANNED_TOMATOES", "name": "Canned tomatoes", "amount": 800, "unit": "g"},
+        {"conceptId": "ONION", "name": "Onion", "amount": 1, "unit": "pc"},
+        {"conceptId": "GARLIC", "name": "Garlic", "amount": 2, "unit": "pc"},
+        {"conceptId": "STOCK", "name": "Vegetable stock", "amount": 300, "unit": "ml"},
+        {"conceptId": "OIL", "name": "Olive oil", "amount": 1, "unit": "tbsp"},
+        {"conceptId": "CREAM", "name": "Cream", "amount": 100, "unit": "ml", "optional": true},
+        {"conceptId": "HERBS_FRESH", "name": "Fresh basil", "optional": true}
+      ],
+      "steps": [
+        "Dice the onion and garlic and sweat them in olive oil until translucent.",
+        "Add the canned tomatoes and stock, season, and simmer for 10 minutes.",
+        "Blend until smooth, stir in the cream if using, and adjust the seasoning.",
+        "Serve topped with basil."
+      ]
+    },
+    {
+      "id": "creamy_chicken_spinach_pasta",
+      "title": "Creamy Chicken & Spinach Pasta",
+      "servings": 2,
+      "prepMinutes": 25,
+      "tags": [],
+      "image": null,
+      "ingredients": [
+        {"conceptId": "PASTA", "name": "Pasta", "amount": 250, "unit": "g"},
+        {"conceptId": "CHICKEN", "name": "Chicken breast", "amount": 300, "unit": "g"},
+        {"conceptId": "SPINACH", "name": "Spinach", "amount": 150, "unit": "g"},
+        {"conceptId": "CREAM", "name": "Cream", "amount": 200, "unit": "ml"},
+        {"conceptId": "GARLIC", "name": "Garlic", "amount": 2, "unit": "pc"},
+        {"conceptId": "ONION", "name": "Onion", "amount": 1, "unit": "pc", "optional": true},
+        {"conceptId": "CHEESE_HARD", "name": "Parmesan", "amount": 40, "unit": "g", "optional": true}
+      ],
+      "steps": [
+        "Cook the pasta in salted water until al dente.",
+        "Cut the chicken into strips and fry until golden; set aside.",
+        "Soften the garlic (and onion) in the same pan, add the cream, and simmer briefly.",
+        "Fold in the spinach until wilted, return the chicken, and toss with the pasta.",
+        "Finish with grated parmesan."
+      ]
+    },
+    {
+      "id": "veggie_fried_rice",
+      "title": "Veggie Fried Rice",
+      "servings": 2,
+      "prepMinutes": 20,
+      "tags": ["vegetarian", "quick"],
+      "image": null,
+      "ingredients": [
+        {"conceptId": "RICE", "name": "Rice", "amount": 250, "unit": "g"},
+        {"conceptId": "PEAS", "name": "Peas", "amount": 150, "unit": "g"},
+        {"conceptId": "CARROT", "name": "Carrots", "amount": 2, "unit": "pc"},
+        {"conceptId": "EGGS", "name": "Eggs", "amount": 2, "unit": "pc"},
+        {"conceptId": "ONION", "name": "Onion", "amount": 1, "unit": "pc"},
+        {"conceptId": "GARLIC", "name": "Garlic", "amount": 2, "unit": "pc"},
+        {"conceptId": "SOY_SAUCE", "name": "Soy sauce", "amount": 3, "unit": "tbsp"},
+        {"conceptId": "OIL", "name": "Oil", "amount": 2, "unit": "tbsp"}
+      ],
+      "steps": [
+        "Cook the rice and let it cool — day-old rice works best.",
+        "Stir-fry the diced onion, garlic and carrots in hot oil.",
+        "Push everything aside, scramble the eggs in the pan, then add rice and peas.",
+        "Season with soy sauce and fry until everything is hot and lightly crisped."
+      ]
+    },
+    {
+      "id": "cheesy_omelette",
+      "title": "Cheesy Omelette",
+      "servings": 1,
+      "prepMinutes": 10,
+      "tags": ["vegetarian", "quick", "breakfast"],
+      "image": null,
+      "ingredients": [
+        {"conceptId": "EGGS", "name": "Eggs", "amount": 3, "unit": "pc"},
+        {"conceptId": "CHEESE", "name": "Grated cheese", "amount": 60, "unit": "g"},
+        {"conceptId": "BUTTER", "name": "Butter", "amount": 15, "unit": "g"},
+        {"conceptId": "WHOLE_MILK", "name": "Milk", "amount": 50, "unit": "ml", "optional": true},
+        {"conceptId": "HERBS_FRESH", "name": "Chives", "optional": true}
+      ],
+      "steps": [
+        "Whisk the eggs with a splash of milk, salt and pepper.",
+        "Melt the butter in a nonstick pan and pour in the eggs.",
+        "When almost set, scatter the cheese over one half and fold the omelette over.",
+        "Slide onto a plate and top with chives."
+      ]
+    },
+    {
+      "id": "shakshuka",
+      "title": "Shakshuka",
+      "servings": 2,
+      "prepMinutes": 25,
+      "tags": ["vegetarian"],
+      "image": null,
+      "ingredients": [
+        {"conceptId": "EGGS", "name": "Eggs", "amount": 4, "unit": "pc"},
+        {"conceptId": "CANNED_TOMATOES", "name": "Canned tomatoes", "amount": 400, "unit": "g"},
+        {"conceptId": "BELL_PEPPER", "name": "Bell pepper", "amount": 1, "unit": "pc"},
+        {"conceptId": "ONION", "name": "Onion", "amount": 1, "unit": "pc"},
+        {"conceptId": "GARLIC", "name": "Garlic", "amount": 2, "unit": "pc"},
+        {"conceptId": "OIL", "name": "Olive oil", "amount": 2, "unit": "tbsp"},
+        {"conceptId": "SPICE_MIX", "name": "Paprika & cumin", "optional": true},
+        {"conceptId": "BREAD", "name": "Bread for serving", "optional": true}
+      ],
+      "steps": [
+        "Soften the sliced onion and pepper in olive oil, then add garlic and spices.",
+        "Pour in the tomatoes and simmer to a thick sauce, about 10 minutes.",
+        "Make wells in the sauce, crack in the eggs, cover, and cook until just set.",
+        "Serve straight from the pan with bread."
+      ]
+    },
+    {
+      "id": "spinach_feta_pasta",
+      "title": "Spinach & Feta Pasta",
+      "servings": 2,
+      "prepMinutes": 20,
+      "tags": ["vegetarian", "quick"],
+      "image": null,
+      "ingredients": [
+        {"conceptId": "PASTA", "name": "Pasta", "amount": 250, "unit": "g"},
+        {"conceptId": "SPINACH", "name": "Spinach", "amount": 200, "unit": "g"},
+        {"conceptId": "CHEESE_SOFT", "name": "Feta", "amount": 100, "unit": "g"},
+        {"conceptId": "GARLIC", "name": "Garlic", "amount": 2, "unit": "pc"},
+        {"conceptId": "OIL", "name": "Olive oil", "amount": 2, "unit": "tbsp"},
+        {"conceptId": "LEMON", "name": "Lemon", "amount": 1, "unit": "pc", "optional": true}
+      ],
+      "steps": [
+        "Cook the pasta and reserve a cup of pasta water.",
+        "Wilt the spinach with garlic in olive oil.",
+        "Toss pasta, spinach and crumbled feta with a splash of pasta water until creamy.",
+        "Brighten with a squeeze of lemon."
+      ]
+    },
+    {
+      "id": "pasta_pomodoro",
+      "title": "Pasta Pomodoro",
+      "servings": 2,
+      "prepMinutes": 20,
+      "tags": ["vegetarian", "quick"],
+      "image": null,
+      "ingredients": [
+        {"conceptId": "PASTA", "name": "Spaghetti", "amount": 250, "unit": "g"},
+        {"conceptId": "CANNED_TOMATOES", "name": "Canned tomatoes", "amount": 400, "unit": "g"},
+        {"conceptId": "GARLIC", "name": "Garlic", "amount": 2, "unit": "pc"},
+        {"conceptId": "ONION", "name": "Onion", "amount": 1, "unit": "pc"},
+        {"conceptId": "OIL", "name": "Olive oil", "amount": 2, "unit": "tbsp"},
+        {"conceptId": "CHEESE_HARD", "name": "Parmesan", "amount": 30, "unit": "g", "optional": true}
+      ],
+      "steps": [
+        "Sweat the diced onion and garlic in olive oil.",
+        "Add the tomatoes, season, and simmer while the spaghetti cooks.",
+        "Toss the drained pasta through the sauce with a little pasta water.",
+        "Serve with parmesan."
+      ]
+    },
+    {
+      "id": "pesto_pasta",
+      "title": "Pesto Pasta",
+      "servings": 2,
+      "prepMinutes": 15,
+      "tags": ["vegetarian", "quick"],
+      "image": null,
+      "ingredients": [
+        {"conceptId": "PASTA", "name": "Pasta", "amount": 250, "unit": "g"},
+        {"conceptId": "PESTO", "name": "Pesto", "amount": 100, "unit": "g"},
+        {"conceptId": "CHEESE_HARD", "name": "Parmesan", "amount": 30, "unit": "g", "optional": true},
+        {"conceptId": "NUTS", "name": "Pine nuts or almonds", "amount": 20, "unit": "g", "optional": true},
+        {"conceptId": "TOMATO", "name": "Cherry tomatoes", "amount": 150, "unit": "g", "optional": true}
+      ],
+      "steps": [
+        "Cook the pasta and keep a little pasta water.",
+        "Off the heat, stir the pesto through with a splash of pasta water.",
+        "Top with parmesan, toasted nuts and halved tomatoes."
+      ]
+    },
+    {
+      "id": "spaghetti_carbonara",
+      "title": "Spaghetti Carbonara",
+      "servings": 2,
+      "prepMinutes": 20,
+      "tags": ["quick"],
+      "image": null,
+      "ingredients": [
+        {"conceptId": "PASTA", "name": "Spaghetti", "amount": 250, "unit": "g"},
+        {"conceptId": "EGGS", "name": "Eggs", "amount": 3, "unit": "pc"},
+        {"conceptId": "BACON", "name": "Bacon", "amount": 100, "unit": "g"},
+        {"conceptId": "CHEESE_HARD", "name": "Parmesan", "amount": 60, "unit": "g"},
+        {"conceptId": "PEPPER_SPICE", "name": "Black pepper", "optional": true}
+      ],
+      "steps": [
+        "Cook the spaghetti; meanwhile crisp the bacon in a wide pan.",
+        "Whisk the eggs with most of the cheese and plenty of pepper.",
+        "Off the heat, toss the hot pasta with the bacon, then the egg mixture, loosening with pasta water until glossy.",
+        "Serve with the remaining cheese."
+      ]
+    },
+    {
+      "id": "spaghetti_bolognese",
+      "title": "Spaghetti Bolognese",
+      "servings": 4,
+      "prepMinutes": 40,
+      "tags": [],
+      "image": null,
+      "ingredients": [
+        {"conceptId": "PASTA", "name": "Spaghetti", "amount": 400, "unit": "g"},
+        {"conceptId": "MINCED_MEAT", "name": "Minced meat", "amount": 400, "unit": "g"},
+        {"conceptId": "CANNED_TOMATOES", "name": "Canned tomatoes", "amount": 800, "unit": "g"},
+        {"conceptId": "ONION", "name": "Onion", "amount": 1, "unit": "pc"},
+        {"conceptId": "GARLIC", "name": "Garlic", "amount": 2, "unit": "pc"},
+        {"conceptId": "CARROT", "name": "Carrot", "amount": 1, "unit": "pc", "optional": true},
+        {"conceptId": "OIL", "name": "Olive oil", "amount": 2, "unit": "tbsp"}
+      ],
+      "steps": [
+        "Brown the minced meat in olive oil, then remove.",
+        "Soften diced onion, garlic and carrot; return the meat.",
+        "Add the tomatoes and simmer at least 25 minutes, seasoning well.",
+        "Serve over freshly cooked spaghetti."
+      ]
+    },
+    {
+      "id": "potato_soup",
+      "title": "Creamy Potato Soup",
+      "servings": 4,
+      "prepMinutes": 35,
+      "tags": ["soup"],
+      "image": null,
+      "ingredients": [
+        {"conceptId": "POTATO", "name": "Potatoes", "amount": 600, "unit": "g"},
+        {"conceptId": "CARROT", "name": "Carrots", "amount": 2, "unit": "pc"},
+        {"conceptId": "LEEK", "name": "Leek", "amount": 1, "unit": "pc", "optional": true},
+        {"conceptId": "ONION", "name": "Onion", "amount": 1, "unit": "pc"},
+        {"conceptId": "STOCK", "name": "Vegetable stock", "amount": 1000, "unit": "ml"},
+        {"conceptId": "CREAM", "name": "Cream", "amount": 100, "unit": "ml", "optional": true},
+        {"conceptId": "SAUSAGE", "name": "Sausages", "amount": 2, "unit": "pc", "optional": true}
+      ],
+      "steps": [
+        "Sweat the diced onion, then add cubed potatoes, carrots and leek.",
+        "Pour in the stock and simmer until everything is soft, about 20 minutes.",
+        "Partly blend for a creamy-but-chunky texture and stir in the cream.",
+        "Add sliced sausage and warm through."
+      ]
+    },
+    {
+      "id": "pumpkin_soup",
+      "title": "Pumpkin Soup",
+      "servings": 4,
+      "prepMinutes": 30,
+      "tags": ["vegetarian", "soup"],
+      "image": null,
+      "ingredients": [
+        {"conceptId": "PUMPKIN", "name": "Pumpkin", "amount": 800, "unit": "g"},
+        {"conceptId": "ONION", "name": "Onion", "amount": 1, "unit": "pc"},
+        {"conceptId": "GINGER", "name": "Ginger", "optional": true},
+        {"conceptId": "STOCK", "name": "Vegetable stock", "amount": 800, "unit": "ml"},
+        {"conceptId": "COCONUT_MILK", "name": "Coconut milk", "amount": 200, "unit": "ml", "optional": true},
+        {"conceptId": "OIL", "name": "Oil", "amount": 2, "unit": "tbsp"}
+      ],
+      "steps": [
+        "Sweat the onion and ginger in oil, then add the cubed pumpkin.",
+        "Cover with stock and simmer until soft, about 15 minutes.",
+        "Blend until silky and finish with coconut milk, salt and pepper."
+      ]
+    },
+    {
+      "id": "lentil_stew",
+      "title": "Lentil Stew",
+      "servings": 4,
+      "prepMinutes": 40,
+      "tags": ["vegetarian", "soup"],
+      "image": null,
+      "ingredients": [
+        {"conceptId": "LENTILS", "name": "Lentils", "amount": 250, "unit": "g"},
+        {"conceptId": "POTATO", "name": "Potatoes", "amount": 300, "unit": "g"},
+        {"conceptId": "CARROT", "name": "Carrots", "amount": 2, "unit": "pc"},
+        {"conceptId": "ONION", "name": "Onion", "amount": 1, "unit": "pc"},
+        {"conceptId": "STOCK", "name": "Vegetable stock", "amount": 1200, "unit": "ml"},
+        {"conceptId": "VINEGAR", "name": "Vinegar", "amount": 1, "unit": "tbsp", "optional": true},
+        {"conceptId": "SAUSAGE", "name": "Sausages", "amount": 2, "unit": "pc", "optional": true}
+      ],
+      "steps": [
+        "Sweat the diced onion, then add lentils, cubed potatoes and carrots.",
+        "Add the stock and simmer until the lentils are tender, 25–30 minutes.",
+        "Season with salt, pepper and a dash of vinegar; add sliced sausage to warm through."
+      ]
+    },
+    {
+      "id": "pea_soup",
+      "title": "Green Pea Soup",
+      "servings": 2,
+      "prepMinutes": 20,
+      "tags": ["vegetarian", "quick", "soup"],
+      "image": null,
+      "ingredients": [
+        {"conceptId": "PEAS", "name": "Peas (frozen)", "amount": 450, "unit": "g"},
+        {"conceptId": "ONION", "name": "Onion", "amount": 1, "unit": "pc"},
+        {"conceptId": "STOCK", "name": "Vegetable stock", "amount": 600, "unit": "ml"},
+        {"conceptId": "CREAM", "name": "Cream", "amount": 100, "unit": "ml", "optional": true},
+        {"conceptId": "BUTTER", "name": "Butter", "amount": 20, "unit": "g"}
+      ],
+      "steps": [
+        "Soften the diced onion in butter.",
+        "Add the peas and stock and simmer for 8 minutes.",
+        "Blend until smooth, stir in the cream, and season."
+      ]
+    },
+    {
+      "id": "chickpea_curry",
+      "title": "Chickpea Coconut Curry",
+      "servings": 2,
+      "prepMinutes": 30,
+      "tags": ["vegan", "vegetarian"],
+      "image": null,
+      "ingredients": [
+        {"conceptId": "CHICKPEAS", "name": "Chickpeas", "amount": 400, "unit": "g"},
+        {"conceptId": "COCONUT_MILK", "name": "Coconut milk", "amount": 400, "unit": "ml"},
+        {"conceptId": "CANNED_TOMATOES", "name": "Canned tomatoes", "amount": 400, "unit": "g", "optional": true},
+        {"conceptId": "ONION", "name": "Onion", "amount": 1, "unit": "pc"},
+        {"conceptId": "GARLIC", "name": "Garlic", "amount": 2, "unit": "pc"},
+        {"conceptId": "GINGER", "name": "Ginger", "optional": true},
+        {"conceptId": "SPICE_MIX", "name": "Curry powder", "amount": 2, "unit": "tbsp"},
+        {"conceptId": "RICE", "name": "Rice", "amount": 200, "unit": "g"}
+      ],
+      "steps": [
+        "Cook the rice.",
+        "Fry the onion, garlic and ginger, then bloom the curry powder briefly.",
+        "Add chickpeas, tomatoes and coconut milk; simmer 15 minutes.",
+        "Season and serve over the rice."
+      ]
+    },
+    {
+      "id": "fried_potatoes",
+      "title": "Pan-Fried Potatoes with Egg",
+      "servings": 2,
+      "prepMinutes": 30,
+      "tags": ["vegetarian"],
+      "image": null,
+      "ingredients": [
+        {"conceptId": "POTATO", "name": "Potatoes", "amount": 600, "unit": "g"},
+        {"conceptId": "ONION", "name": "Onion", "amount": 1, "unit": "pc"},
+        {"conceptId": "EGGS", "name": "Eggs", "amount": 2, "unit": "pc", "optional": true},
+        {"conceptId": "BACON", "name": "Bacon", "amount": 80, "unit": "g", "optional": true},
+        {"conceptId": "OIL", "name": "Oil", "amount": 3, "unit": "tbsp"}
+      ],
+      "steps": [
+        "Parboil the potatoes, cool briefly, and slice.",
+        "Fry in hot oil until golden and crisp, adding onion (and bacon) halfway.",
+        "Season generously and top with fried eggs."
+      ]
+    },
+    {
+      "id": "potato_wedges_dip",
+      "title": "Oven Potato Wedges with Herb Dip",
+      "servings": 2,
+      "prepMinutes": 40,
+      "tags": ["vegetarian", "oven"],
+      "image": null,
+      "ingredients": [
+        {"conceptId": "POTATO", "name": "Potatoes", "amount": 700, "unit": "g"},
+        {"conceptId": "OIL", "name": "Oil", "amount": 3, "unit": "tbsp"},
+        {"conceptId": "SPICE_MIX", "name": "Paprika seasoning", "optional": true},
+        {"conceptId": "QUARK", "name": "Quark", "amount": 250, "unit": "g"},
+        {"conceptId": "HERBS_FRESH", "name": "Fresh herbs", "optional": true},
+        {"conceptId": "GARLIC", "name": "Garlic", "amount": 1, "unit": "pc", "optional": true}
+      ],
+      "steps": [
+        "Cut the potatoes into wedges and toss with oil, salt and paprika.",
+        "Roast at 220 °C for about 30 minutes, turning once.",
+        "Stir the quark with chopped herbs, garlic, salt and pepper and serve as a dip."
+      ]
+    },
+    {
+      "id": "pancakes",
+      "title": "Pancakes",
+      "servings": 2,
+      "prepMinutes": 25,
+      "tags": ["vegetarian", "breakfast"],
+      "image": null,
+      "ingredients": [
+        {"conceptId": "FLOUR", "name": "Flour", "amount": 250, "unit": "g"},
+        {"conceptId": "EGGS", "name": "Eggs", "amount": 2, "unit": "pc"},
+        {"conceptId": "WHOLE_MILK", "name": "Milk", "amount": 400, "unit": "ml"},
+        {"conceptId": "BUTTER", "name": "Butter", "amount": 30, "unit": "g"},
+        {"conceptId": "SUGAR", "name": "Sugar", "amount": 1, "unit": "tbsp", "optional": true},
+        {"conceptId": "JAM", "name": "Jam", "optional": true}
+      ],
+      "steps": [
+        "Whisk flour, eggs, milk, sugar and a pinch of salt into a smooth batter; rest 10 minutes.",
+        "Fry thin pancakes in butter until golden on both sides.",
+        "Serve rolled up with jam."
+      ]
+    },
+    {
+      "id": "french_toast",
+      "title": "French Toast",
+      "servings": 2,
+      "prepMinutes": 15,
+      "tags": ["vegetarian", "quick", "breakfast"],
+      "image": null,
+      "ingredients": [
+        {"conceptId": "TOAST", "name": "Toast or brioche", "amount": 4, "unit": "pc"},
+        {"conceptId": "EGGS", "name": "Eggs", "amount": 2, "unit": "pc"},
+        {"conceptId": "WHOLE_MILK", "name": "Milk", "amount": 100, "unit": "ml"},
+        {"conceptId": "BUTTER", "name": "Butter", "amount": 20, "unit": "g"},
+        {"conceptId": "SUGAR", "name": "Sugar & cinnamon", "amount": 2, "unit": "tbsp", "optional": true}
+      ],
+      "steps": [
+        "Whisk the eggs with the milk and a little sugar.",
+        "Soak the bread slices briefly on both sides.",
+        "Fry in butter until golden and dust with cinnamon sugar."
+      ]
+    },
+    {
+      "id": "porridge",
+      "title": "Banana Porridge",
+      "servings": 1,
+      "prepMinutes": 10,
+      "tags": ["vegetarian", "quick", "breakfast"],
+      "image": null,
+      "ingredients": [
+        {"conceptId": "OATS", "name": "Oats", "amount": 80, "unit": "g"},
+        {"conceptId": "WHOLE_MILK", "name": "Milk", "amount": 300, "unit": "ml"},
+        {"conceptId": "BANANA", "name": "Banana", "amount": 1, "unit": "pc", "optional": true},
+        {"conceptId": "HONEY", "name": "Honey", "optional": true},
+        {"conceptId": "BERRIES_MIXED", "name": "Berries", "amount": 100, "unit": "g", "optional": true}
+      ],
+      "steps": [
+        "Simmer the oats in milk with a pinch of salt, stirring, for about 5 minutes.",
+        "Sweeten with honey and top with sliced banana and berries."
+      ]
+    },
+    {
+      "id": "yogurt_muesli_bowl",
+      "title": "Yogurt Muesli Bowl",
+      "servings": 1,
+      "prepMinutes": 5,
+      "tags": ["vegetarian", "quick", "breakfast"],
+      "image": null,
+      "ingredients": [
+        {"conceptId": "YOGURT", "name": "Yogurt", "amount": 250, "unit": "g"},
+        {"conceptId": "MUESLI", "name": "Muesli", "amount": 60, "unit": "g"},
+        {"conceptId": "BANANA", "name": "Banana", "amount": 1, "unit": "pc", "optional": true},
+        {"conceptId": "BERRIES_MIXED", "name": "Berries", "amount": 100, "unit": "g", "optional": true},
+        {"conceptId": "HONEY", "name": "Honey", "optional": true}
+      ],
+      "steps": [
+        "Spoon the yogurt into a bowl and top with muesli.",
+        "Add fruit and a drizzle of honey."
+      ]
+    },
+    {
+      "id": "scrambled_eggs_toast",
+      "title": "Scrambled Eggs on Toast",
+      "servings": 1,
+      "prepMinutes": 10,
+      "tags": ["vegetarian", "quick", "breakfast"],
+      "image": null,
+      "ingredients": [
+        {"conceptId": "EGGS", "name": "Eggs", "amount": 3, "unit": "pc"},
+        {"conceptId": "TOAST", "name": "Toast", "amount": 2, "unit": "pc"},
+        {"conceptId": "BUTTER", "name": "Butter", "amount": 15, "unit": "g"},
+        {"conceptId": "HERBS_FRESH", "name": "Chives", "optional": true}
+      ],
+      "steps": [
+        "Toast the bread and butter it.",
+        "Whisk and season the eggs, then scramble gently in butter over low heat.",
+        "Pile onto the toast and finish with chives."
+      ]
+    },
+    {
+      "id": "avocado_toast",
+      "title": "Avocado Toast",
+      "servings": 1,
+      "prepMinutes": 10,
+      "tags": ["vegetarian", "quick", "breakfast"],
+      "image": null,
+      "ingredients": [
+        {"conceptId": "BREAD", "name": "Bread", "amount": 2, "unit": "pc"},
+        {"conceptId": "AVOCADO", "name": "Avocado", "amount": 1, "unit": "pc"},
+        {"conceptId": "LEMON", "name": "Lemon", "amount": 1, "unit": "pc", "optional": true},
+        {"conceptId": "EGGS", "name": "Egg", "amount": 1, "unit": "pc", "optional": true},
+        {"conceptId": "CHILI", "name": "Chili flakes", "optional": true}
+      ],
+      "steps": [
+        "Toast the bread.",
+        "Mash the avocado with lemon juice, salt and pepper and spread it on.",
+        "Top with a fried or poached egg and chili flakes."
+      ]
+    },
+    {
+      "id": "greek_salad",
+      "title": "Greek Salad",
+      "servings": 2,
+      "prepMinutes": 15,
+      "tags": ["vegetarian", "quick", "salad"],
+      "image": null,
+      "ingredients": [
+        {"conceptId": "CUCUMBER", "name": "Cucumber", "amount": 1, "unit": "pc"},
+        {"conceptId": "TOMATO", "name": "Tomatoes", "amount": 3, "unit": "pc"},
+        {"conceptId": "ONION", "name": "Red onion", "amount": 1, "unit": "pc"},
+        {"conceptId": "OLIVES", "name": "Olives", "amount": 80, "unit": "g"},
+        {"conceptId": "CHEESE_SOFT", "name": "Feta", "amount": 100, "unit": "g"},
+        {"conceptId": "OIL", "name": "Olive oil", "amount": 3, "unit": "tbsp"},
+        {"conceptId": "VINEGAR", "name": "Vinegar", "amount": 1, "unit": "tbsp", "optional": true}
+      ],
+      "steps": [
+        "Chop the cucumber and tomatoes, slice the onion thinly.",
+        "Toss with olives, oil and vinegar; season with salt and oregano.",
+        "Top with feta."
+      ]
+    },
+    {
+      "id": "tomato_mozzarella",
+      "title": "Tomato & Mozzarella Salad",
+      "servings": 2,
+      "prepMinutes": 10,
+      "tags": ["vegetarian", "quick", "salad"],
+      "image": null,
+      "ingredients": [
+        {"conceptId": "TOMATO", "name": "Tomatoes", "amount": 3, "unit": "pc"},
+        {"conceptId": "CHEESE_FRESH", "name": "Mozzarella", "amount": 250, "unit": "g"},
+        {"conceptId": "HERBS_FRESH", "name": "Basil"},
+        {"conceptId": "OIL", "name": "Olive oil", "amount": 2, "unit": "tbsp"},
+        {"conceptId": "BREAD", "name": "Ciabatta", "optional": true}
+      ],
+      "steps": [
+        "Slice the tomatoes and mozzarella and arrange them alternately.",
+        "Season with salt and pepper, drizzle with olive oil, and scatter basil leaves.",
+        "Serve with fresh bread."
+      ]
+    },
+    {
+      "id": "chicken_rice_bowl",
+      "title": "Chicken & Broccoli Rice Bowl",
+      "servings": 2,
+      "prepMinutes": 30,
+      "tags": [],
+      "image": null,
+      "ingredients": [
+        {"conceptId": "CHICKEN", "name": "Chicken breast", "amount": 300, "unit": "g"},
+        {"conceptId": "RICE", "name": "Rice", "amount": 200, "unit": "g"},
+        {"conceptId": "BROCCOLI", "name": "Broccoli", "amount": 300, "unit": "g"},
+        {"conceptId": "SOY_SAUCE", "name": "Soy sauce", "amount": 3, "unit": "tbsp"},
+        {"conceptId": "GARLIC", "name": "Garlic", "amount": 2, "unit": "pc"},
+        {"conceptId": "OIL", "name": "Oil", "amount": 2, "unit": "tbsp"}
+      ],
+      "steps": [
+        "Cook the rice and steam the broccoli florets until just tender.",
+        "Fry the sliced chicken with garlic, then glaze with soy sauce.",
+        "Assemble bowls of rice, chicken and broccoli, spooning the pan juices over."
+      ]
+    },
+    {
+      "id": "salmon_potatoes",
+      "title": "Oven Salmon with Potatoes",
+      "servings": 2,
+      "prepMinutes": 35,
+      "tags": ["oven"],
+      "image": null,
+      "ingredients": [
+        {"conceptId": "SALMON", "name": "Salmon fillets", "amount": 300, "unit": "g"},
+        {"conceptId": "POTATO", "name": "Potatoes", "amount": 500, "unit": "g"},
+        {"conceptId": "LEMON", "name": "Lemon", "amount": 1, "unit": "pc"},
+        {"conceptId": "BUTTER", "name": "Butter", "amount": 30, "unit": "g"},
+        {"conceptId": "HERBS_FRESH", "name": "Dill", "optional": true}
+      ],
+      "steps": [
+        "Boil the potatoes in salted water.",
+        "Season the salmon, top with butter and lemon slices, and bake at 200 °C for 12–15 minutes.",
+        "Serve with the potatoes and a scatter of dill."
+      ]
+    },
+    {
+      "id": "tuna_pasta",
+      "title": "Tuna Tomato Pasta",
+      "servings": 2,
+      "prepMinutes": 20,
+      "tags": ["quick"],
+      "image": null,
+      "ingredients": [
+        {"conceptId": "PASTA", "name": "Pasta", "amount": 250, "unit": "g"},
+        {"conceptId": "CANNED_FISH", "name": "Canned tuna", "amount": 140, "unit": "g"},
+        {"conceptId": "CANNED_TOMATOES", "name": "Canned tomatoes", "amount": 400, "unit": "g"},
+        {"conceptId": "ONION", "name": "Onion", "amount": 1, "unit": "pc"},
+        {"conceptId": "GARLIC", "name": "Garlic", "amount": 2, "unit": "pc"},
+        {"conceptId": "OLIVES", "name": "Olives", "amount": 50, "unit": "g", "optional": true}
+      ],
+      "steps": [
+        "Cook the pasta.",
+        "Soften the onion and garlic, add the tomatoes, and simmer briefly.",
+        "Fold in the drained tuna and olives, warm through, and toss with the pasta."
+      ]
+    },
+    {
+      "id": "fish_sticks_mash",
+      "title": "Fish Sticks with Mashed Potatoes",
+      "servings": 2,
+      "prepMinutes": 30,
+      "tags": [],
+      "image": null,
+      "ingredients": [
+        {"conceptId": "FISH_STICKS", "name": "Fish sticks", "amount": 8, "unit": "pc"},
+        {"conceptId": "POTATO", "name": "Potatoes", "amount": 600, "unit": "g"},
+        {"conceptId": "WHOLE_MILK", "name": "Milk", "amount": 100, "unit": "ml"},
+        {"conceptId": "BUTTER", "name": "Butter", "amount": 30, "unit": "g"},
+        {"conceptId": "PEAS", "name": "Peas", "amount": 200, "unit": "g", "optional": true}
+      ],
+      "steps": [
+        "Boil the potatoes until soft, then mash with warm milk and butter.",
+        "Fry the fish sticks until golden and cook the peas.",
+        "Season the mash with salt and nutmeg and serve everything together."
+      ]
+    },
+    {
+      "id": "gnocchi_pan",
+      "title": "Gnocchi Vegetable Pan",
+      "servings": 2,
+      "prepMinutes": 20,
+      "tags": ["vegetarian", "quick"],
+      "image": null,
+      "ingredients": [
+        {"conceptId": "GNOCCHI", "name": "Gnocchi", "amount": 500, "unit": "g"},
+        {"conceptId": "ZUCCHINI", "name": "Zucchini", "amount": 1, "unit": "pc"},
+        {"conceptId": "TOMATO", "name": "Cherry tomatoes", "amount": 200, "unit": "g"},
+        {"conceptId": "GARLIC", "name": "Garlic", "amount": 2, "unit": "pc"},
+        {"conceptId": "OIL", "name": "Olive oil", "amount": 2, "unit": "tbsp"},
+        {"conceptId": "CHEESE_HARD", "name": "Parmesan", "amount": 30, "unit": "g", "optional": true},
+        {"conceptId": "PESTO", "name": "Pesto", "amount": 50, "unit": "g", "optional": true}
+      ],
+      "steps": [
+        "Fry the gnocchi in olive oil until golden, straight from the pack.",
+        "Add diced zucchini and garlic; after a few minutes add the halved tomatoes.",
+        "Toss with pesto or parmesan and season."
+      ]
+    },
+    {
+      "id": "veggie_noodle_stir_fry",
+      "title": "Vegetable Noodle Stir-Fry",
+      "servings": 2,
+      "prepMinutes": 25,
+      "tags": ["vegetarian"],
+      "image": null,
+      "ingredients": [
+        {"conceptId": "PASTA", "name": "Noodles", "amount": 250, "unit": "g"},
+        {"conceptId": "BELL_PEPPER", "name": "Bell pepper", "amount": 1, "unit": "pc"},
+        {"conceptId": "CARROT", "name": "Carrots", "amount": 2, "unit": "pc"},
+        {"conceptId": "BROCCOLI", "name": "Broccoli", "amount": 200, "unit": "g", "optional": true},
+        {"conceptId": "GARLIC", "name": "Garlic", "amount": 2, "unit": "pc"},
+        {"conceptId": "GINGER", "name": "Ginger", "optional": true},
+        {"conceptId": "SOY_SAUCE", "name": "Soy sauce", "amount": 4, "unit": "tbsp"},
+        {"conceptId": "OIL", "name": "Oil", "amount": 2, "unit": "tbsp"}
+      ],
+      "steps": [
+        "Cook the noodles just shy of done.",
+        "Stir-fry the sliced vegetables with garlic and ginger over high heat.",
+        "Add the noodles and soy sauce and toss until glossy."
+      ]
+    },
+    {
+      "id": "couscous_salad",
+      "title": "Couscous Salad",
+      "servings": 2,
+      "prepMinutes": 20,
+      "tags": ["vegan", "vegetarian", "quick", "salad"],
+      "image": null,
+      "ingredients": [
+        {"conceptId": "COUSCOUS", "name": "Couscous", "amount": 200, "unit": "g"},
+        {"conceptId": "CUCUMBER", "name": "Cucumber", "amount": 1, "unit": "pc"},
+        {"conceptId": "TOMATO", "name": "Tomatoes", "amount": 2, "unit": "pc"},
+        {"conceptId": "BELL_PEPPER", "name": "Bell pepper", "amount": 1, "unit": "pc", "optional": true},
+        {"conceptId": "LEMON", "name": "Lemon", "amount": 1, "unit": "pc"},
+        {"conceptId": "OIL", "name": "Olive oil", "amount": 3, "unit": "tbsp"},
+        {"conceptId": "HERBS_FRESH", "name": "Parsley or mint", "optional": true}
+      ],
+      "steps": [
+        "Pour hot water over the couscous, cover, and fluff after 10 minutes.",
+        "Dice the vegetables finely and mix in.",
+        "Dress with lemon juice, olive oil, salt and herbs."
+      ]
+    },
+    {
+      "id": "stuffed_peppers",
+      "title": "Stuffed Bell Peppers",
+      "servings": 4,
+      "prepMinutes": 50,
+      "tags": ["oven"],
+      "image": null,
+      "ingredients": [
+        {"conceptId": "BELL_PEPPER", "name": "Bell peppers", "amount": 4, "unit": "pc"},
+        {"conceptId": "MINCED_MEAT", "name": "Minced meat", "amount": 400, "unit": "g"},
+        {"conceptId": "RICE", "name": "Rice", "amount": 100, "unit": "g"},
+        {"conceptId": "ONION", "name": "Onion", "amount": 1, "unit": "pc"},
+        {"conceptId": "CANNED_TOMATOES", "name": "Canned tomatoes", "amount": 400, "unit": "g"},
+        {"conceptId": "CHEESE", "name": "Grated cheese", "amount": 80, "unit": "g", "optional": true}
+      ],
+      "steps": [
+        "Parcook the rice; mix with the browned meat and onion, and season well.",
+        "Halve and core the peppers and fill them with the mixture.",
+        "Set in a dish, pour the tomatoes around, top with cheese, and bake at 180 °C for about 30 minutes."
+      ]
+    },
+    {
+      "id": "sheet_pan_veggies",
+      "title": "Sheet-Pan Roast Vegetables",
+      "servings": 2,
+      "prepMinutes": 45,
+      "tags": ["vegetarian", "vegan", "oven"],
+      "image": null,
+      "ingredients": [
+        {"conceptId": "POTATO", "name": "Potatoes", "amount": 500, "unit": "g"},
+        {"conceptId": "ZUCCHINI", "name": "Zucchini", "amount": 1, "unit": "pc"},
+        {"conceptId": "BELL_PEPPER", "name": "Bell pepper", "amount": 1, "unit": "pc"},
+        {"conceptId": "ONION", "name": "Red onion", "amount": 1, "unit": "pc"},
+        {"conceptId": "OIL", "name": "Olive oil", "amount": 3, "unit": "tbsp"},
+        {"conceptId": "SPICE_MIX", "name": "Herbs & paprika", "optional": true},
+        {"conceptId": "CHEESE", "name": "Cheese to gratinate", "amount": 80, "unit": "g", "optional": true}
+      ],
+      "steps": [
+        "Chop everything into bite-size pieces and toss with oil, salt and spices.",
+        "Roast at 200 °C for 30–35 minutes, turning once.",
+        "Optionally scatter cheese over for the last 5 minutes."
+      ]
+    },
+    {
+      "id": "quesadillas",
+      "title": "Cheese & Bean Quesadillas",
+      "servings": 2,
+      "prepMinutes": 20,
+      "tags": ["vegetarian", "quick"],
+      "image": null,
+      "ingredients": [
+        {"conceptId": "TORTILLA", "name": "Tortillas", "amount": 4, "unit": "pc"},
+        {"conceptId": "CHEESE", "name": "Grated cheese", "amount": 150, "unit": "g"},
+        {"conceptId": "CANNED_BEANS", "name": "Beans", "amount": 240, "unit": "g", "optional": true},
+        {"conceptId": "CANNED_CORN", "name": "Corn", "amount": 140, "unit": "g", "optional": true},
+        {"conceptId": "BELL_PEPPER", "name": "Bell pepper", "amount": 1, "unit": "pc", "optional": true},
+        {"conceptId": "SOUR_CREAM", "name": "Sour cream", "optional": true}
+      ],
+      "steps": [
+        "Scatter cheese, drained beans, corn and diced pepper over half of each tortilla and fold.",
+        "Toast in a dry pan until the cheese melts and the outside crisps, flipping once.",
+        "Cut into wedges and serve with sour cream."
+      ]
+    },
+    {
+      "id": "chili_con_carne",
+      "title": "Chili con Carne",
+      "servings": 4,
+      "prepMinutes": 40,
+      "tags": [],
+      "image": null,
+      "ingredients": [
+        {"conceptId": "MINCED_MEAT", "name": "Minced beef", "amount": 400, "unit": "g"},
+        {"conceptId": "CANNED_BEANS", "name": "Kidney beans", "amount": 480, "unit": "g"},
+        {"conceptId": "CANNED_TOMATOES", "name": "Canned tomatoes", "amount": 800, "unit": "g"},
+        {"conceptId": "CANNED_CORN", "name": "Corn", "amount": 140, "unit": "g", "optional": true},
+        {"conceptId": "ONION", "name": "Onion", "amount": 1, "unit": "pc"},
+        {"conceptId": "GARLIC", "name": "Garlic", "amount": 2, "unit": "pc"},
+        {"conceptId": "CHILI", "name": "Chili", "optional": true},
+        {"conceptId": "RICE", "name": "Rice", "amount": 200, "unit": "g", "optional": true}
+      ],
+      "steps": [
+        "Brown the meat, then soften the onion, garlic and chili with it.",
+        "Add tomatoes, drained beans and corn and simmer 20–25 minutes.",
+        "Season with cumin, salt and pepper; serve with rice or bread."
+      ]
+    },
+    {
+      "id": "mushroom_risotto",
+      "title": "Mushroom Risotto",
+      "servings": 2,
+      "prepMinutes": 40,
+      "tags": ["vegetarian"],
+      "image": null,
+      "ingredients": [
+        {"conceptId": "RICE", "name": "Risotto rice", "amount": 250, "unit": "g"},
+        {"conceptId": "MUSHROOM", "name": "Mushrooms", "amount": 400, "unit": "g"},
+        {"conceptId": "ONION", "name": "Onion", "amount": 1, "unit": "pc"},
+        {"conceptId": "STOCK", "name": "Stock", "amount": 1000, "unit": "ml"},
+        {"conceptId": "BUTTER", "name": "Butter", "amount": 50, "unit": "g"},
+        {"conceptId": "CHEESE_HARD", "name": "Parmesan", "amount": 50, "unit": "g"},
+        {"conceptId": "WINE", "name": "White wine", "amount": 100, "unit": "ml", "optional": true}
+      ],
+      "steps": [
+        "Sear the sliced mushrooms in butter and set aside.",
+        "Sweat the onion, toast the rice, and deglaze with wine.",
+        "Add hot stock a ladle at a time, stirring, until creamy — about 20 minutes.",
+        "Fold in the mushrooms, parmesan and a knob of butter."
+      ]
+    },
+    {
+      "id": "cauliflower_gratin",
+      "title": "Cauliflower Gratin",
+      "servings": 2,
+      "prepMinutes": 45,
+      "tags": ["vegetarian", "oven"],
+      "image": null,
+      "ingredients": [
+        {"conceptId": "CAULIFLOWER", "name": "Cauliflower", "amount": 1, "unit": "pc"},
+        {"conceptId": "POTATO", "name": "Potatoes", "amount": 400, "unit": "g", "optional": true},
+        {"conceptId": "CREAM", "name": "Cream", "amount": 200, "unit": "ml"},
+        {"conceptId": "CHEESE", "name": "Grated cheese", "amount": 120, "unit": "g"},
+        {"conceptId": "BUTTER", "name": "Butter", "amount": 20, "unit": "g"}
+      ],
+      "steps": [
+        "Blanch the cauliflower florets (and sliced potatoes) for 5 minutes.",
+        "Lay in a buttered dish, season, and pour the cream over.",
+        "Top with cheese and bake at 200 °C until golden, about 25 minutes."
+      ]
+    },
+    {
+      "id": "zucchini_soup",
+      "title": "Zucchini Soup",
+      "servings": 2,
+      "prepMinutes": 25,
+      "tags": ["vegetarian", "quick", "soup"],
+      "image": null,
+      "ingredients": [
+        {"conceptId": "ZUCCHINI", "name": "Zucchini", "amount": 600, "unit": "g"},
+        {"conceptId": "POTATO", "name": "Potato", "amount": 1, "unit": "pc"},
+        {"conceptId": "ONION", "name": "Onion", "amount": 1, "unit": "pc"},
+        {"conceptId": "STOCK", "name": "Vegetable stock", "amount": 700, "unit": "ml"},
+        {"conceptId": "CREAM", "name": "Cream", "amount": 100, "unit": "ml", "optional": true}
+      ],
+      "steps": [
+        "Sweat the onion, then add chopped zucchini and potato.",
+        "Add stock and simmer until soft, about 15 minutes.",
+        "Blend, stir in the cream, and season with salt, pepper and nutmeg."
+      ]
+    },
+    {
+      "id": "aglio_e_olio",
+      "title": "Spaghetti Aglio e Olio",
+      "servings": 2,
+      "prepMinutes": 15,
+      "tags": ["vegan", "vegetarian", "quick"],
+      "image": null,
+      "ingredients": [
+        {"conceptId": "PASTA", "name": "Spaghetti", "amount": 250, "unit": "g"},
+        {"conceptId": "GARLIC", "name": "Garlic", "amount": 4, "unit": "pc"},
+        {"conceptId": "OIL", "name": "Olive oil", "amount": 60, "unit": "ml"},
+        {"conceptId": "CHILI", "name": "Chili flakes", "optional": true},
+        {"conceptId": "CHEESE_HARD", "name": "Parmesan", "amount": 30, "unit": "g", "optional": true},
+        {"conceptId": "HERBS_FRESH", "name": "Parsley", "optional": true}
+      ],
+      "steps": [
+        "Cook the spaghetti in well-salted water.",
+        "Gently warm sliced garlic and chili in the olive oil without browning.",
+        "Toss the pasta through with a splash of pasta water, parsley and parmesan."
+      ]
+    }
+  ]
+}

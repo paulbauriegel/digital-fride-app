@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Mirrors GroceriesDarkColorScheme.surface in ui/theme/Color.kt. Keep the two in step:
+         this is what fills the window until Compose draws its first frame. -->
+    <color name="window_background">#FF101110</color>
+</resources>

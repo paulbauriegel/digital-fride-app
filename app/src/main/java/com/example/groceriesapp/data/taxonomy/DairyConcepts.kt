@@ -10,7 +10,7 @@ internal val dairyConcepts: List<FoodConcept> = listOf(
         category = GroceryCategory.DAIRY,
         displayName = "Milk",
         iconRes = R.drawable.ic_food_whole_milk,
-        keywords = listOf("vollmilch", "frischmilch", "milch"),
+        keywords = listOf("vollmilch", "frischmilch", "milch", "matcha", "matchs"),
     ),
     FoodConcept(
         id = "HMILCH",
@@ -49,6 +49,15 @@ internal val dairyConcepts: List<FoodConcept> = listOf(
         priorityKeywords = listOf("joghurt", "jogurt", "actimel"),
     ),
     FoodConcept(
+        // A yogurt-cucumber dip rather than a yogurt: it is bought and used as a spread, and
+        // keeping it separate stops "Griech-Zaziki" from being read as plain yogurt.
+        id = "TZATZIKI",
+        category = GroceryCategory.DAIRY,
+        displayName = "Tzatziki",
+        iconRes = R.drawable.ic_food_quark,
+        keywords = listOf("zaziki", "tzatziki"),
+    ),
+    FoodConcept(
         id = "QUARK",
         category = GroceryCategory.DAIRY,
         displayName = "Quark",
@@ -83,7 +92,12 @@ internal val dairyConcepts: List<FoodConcept> = listOf(
         category = GroceryCategory.DAIRY,
         displayName = "Hard cheese",
         iconRes = R.drawable.ic_food_cheese_hard,
-        keywords = listOf("gouda", "emmentaler", "bergkäse", "parmesan", "cheddar"),
+        keywords = listOf(
+            "gouda", "emmentaler", "bergkäse", "parmesan", "cheddar",
+            "parmigiano", "reggiano",
+            // "pamigani regg" is an OCR misread of "Parmigiano Regg[iano]".
+            "pamigani regg",
+        ),
     ),
     FoodConcept(
         id = "CHEESE_SOFT",
@@ -107,6 +121,15 @@ internal val dairyConcepts: List<FoodConcept> = listOf(
         keywords = listOf("schnittkäse", "scheibletten"),
     ),
     FoodConcept(
+        id = "HALLOUMI",
+        category = GroceryCategory.DAIRY,
+        displayName = "Halloumi",
+        // No dedicated artwork; hard cheese is the closest match among the bundled icons.
+        iconRes = R.drawable.ic_food_cheese_hard,
+        keywords = listOf("halloumi"),
+        priorityKeywords = listOf("halloumi"),
+    ),
+    FoodConcept(
         id = "CHEESE",
         category = GroceryCategory.DAIRY,
         displayName = "Cheese",
@@ -127,7 +150,10 @@ internal val dairyConcepts: List<FoodConcept> = listOf(
         iconRes = R.drawable.ic_food_plant_milk,
         keywords = listOf(
             "hafermilch", "mandelmilch", "sojamilch", "haferdrink", "sojadrink", "barista",
-            "erbsenprotein", "erbsenprot", "erbsendrink",
+            "erbsenprotein", "erbsenprot", "erbsendrink", "alpro soja",
+            // "soya" is Alpro's own English-language spelling ("Alpro Soya"), distinct from the
+            // German "soja" already covered above — both appear on receipts.
+            "alpro soya", "soya drink", "soya milk",
         ),
         // Pea-protein drinks must outrank PEAS, whose "erbse" keyword they contain.
         priorityKeywords = listOf("erbsenprotein", "erbsenprot", "erbsendrink"),

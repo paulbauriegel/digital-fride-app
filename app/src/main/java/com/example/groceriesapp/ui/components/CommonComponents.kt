@@ -25,13 +25,14 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.example.groceriesapp.data.taxonomy.StorageLocation
 import com.example.groceriesapp.ui.theme.spacing
+import com.example.groceriesapp.ui.theme.storageLocationColors
 
 @Composable
 fun EmptyStateCard(
     title: String,
     body: String,
-    actionLabel: String,
-    onAction: () -> Unit,
+    actionLabel: String? = null,
+    onAction: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     icon: ImageVector = Icons.AutoMirrored.Filled.ReceiptLong,
 ) {
@@ -68,8 +69,10 @@ fun EmptyStateCard(
                 textAlign = TextAlign.Center,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Button(onClick = onAction) {
-                Text(actionLabel)
+            if (actionLabel != null && onAction != null) {
+                Button(onClick = onAction) {
+                    Text(actionLabel)
+                }
             }
         }
     }
@@ -84,8 +87,8 @@ fun LocationBadge(
     Surface(
         modifier = modifier,
         shape = CircleShape,
-        color = MaterialTheme.colorScheme.surfaceContainerHighest,
-        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        color = MaterialTheme.storageLocationColors.containerFor(location),
+        contentColor = MaterialTheme.storageLocationColors.onContainerFor(location),
     ) {
         Text(
             text = location.displayName,
