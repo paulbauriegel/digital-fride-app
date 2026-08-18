@@ -45,8 +45,10 @@ internal val dairyConcepts: List<FoodConcept> = listOf(
         category = GroceryCategory.DAIRY,
         displayName = "Yogurt",
         iconRes = R.drawable.ic_food_yogurt,
-        keywords = listOf("joghurt", "jogurt", "actimel"),
-        priorityKeywords = listOf("joghurt", "jogurt", "actimel"),
+        // "ayran" is the salted yogurt drink; it keeps a yogurt's shelf life, and the flavour word
+        // on the pack ("MANGO AYRAN") must not carry the row off to the fruit aisle.
+        keywords = listOf("joghurt", "jogurt", "actimel", "ayran"),
+        priorityKeywords = listOf("joghurt", "jogurt", "actimel", "ayran"),
     ),
     FoodConcept(
         // A yogurt-cucumber dip rather than a yogurt: it is bought and used as a spread, and
@@ -78,7 +80,9 @@ internal val dairyConcepts: List<FoodConcept> = listOf(
         category = GroceryCategory.DAIRY,
         displayName = "Butter",
         iconRes = R.drawable.ic_food_butter,
-        keywords = listOf("butter"),
+        // "suesser-butt" catches receipt-truncated "Bio Suesser-Butt[er]" (sweet cream butter),
+        // which is cut before "butter" itself appears.
+        keywords = listOf("butter", "suesser-butt"),
     ),
     FoodConcept(
         id = "MARGARINE",
@@ -111,7 +115,18 @@ internal val dairyConcepts: List<FoodConcept> = listOf(
         category = GroceryCategory.DAIRY,
         displayName = "Fresh cheese",
         iconRes = R.drawable.ic_food_cheese_fresh,
-        keywords = listOf("frischkäse", "mozzarella", "feta", "hüttenkäse", "ricotta"),
+        keywords = listOf(
+            "frischkäse", "mozzarella", "feta", "hüttenkäse", "ricotta",
+            // Exquisa is a cream-cheese brand; "esquisa" is an OCR misread (x read as s).
+            "exquisa", "esquisa",
+            // Miree is a cream-cheese brand. Only the brand is listed: its flavour words are
+            // real products in their own right ("Meerrettich" is a horseradish jar), so teaching
+            // those to mean cream cheese would misfile the jars.
+            "miree",
+        ),
+        // The brand outranks the flavour half of the name, which is a longer substring and would
+        // otherwise win: "Miree Meerrettich" holds RADISH's "rettich".
+        priorityKeywords = listOf("miree"),
     ),
     FoodConcept(
         id = "CHEESE_SLICED",

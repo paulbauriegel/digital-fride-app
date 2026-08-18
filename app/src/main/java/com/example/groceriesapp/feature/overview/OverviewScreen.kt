@@ -53,6 +53,7 @@ import com.example.groceriesapp.data.recipes.RecipeMatcher
 import com.example.groceriesapp.data.taxonomy.StorageLocation
 import com.example.groceriesapp.data.taxonomy.resolveIconRes
 import com.example.groceriesapp.feature.inventory.AddInventoryItemDialog
+import com.example.groceriesapp.feature.inventory.AddItemMethodSheet
 import com.example.groceriesapp.feature.recipes.RecipeImage
 import com.example.groceriesapp.ui.components.EmptyStateCard
 import com.example.groceriesapp.ui.components.SectionHeader
@@ -82,6 +83,7 @@ fun OverviewScreen(
     imageVersion: Int,
     onScanReceipt: () -> Unit,
     onAddItem: (InventoryItem) -> Unit,
+    onScanBarcode: () -> Unit,
     onOpenInventory: (StorageLocation?) -> Unit,
     onOpenRecipes: () -> Unit,
     onOpenRecipe: (String) -> Unit,
@@ -89,6 +91,7 @@ fun OverviewScreen(
     modifier: Modifier = Modifier,
 ) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
+    var showAddChoice by rememberSaveable { mutableStateOf(false) }
     var showAddDialog by rememberSaveable { mutableStateOf(false) }
     val useSoon = remember(inventory) {
         inventory
@@ -190,7 +193,7 @@ fun OverviewScreen(
                         QuickActionTile(
                             icon = Icons.Default.Add,
                             label = "Add item",
-                            onClick = { showAddDialog = true },
+                            onClick = { showAddChoice = true },
                             modifier = Modifier.weight(1f),
                         )
                         QuickActionTile(
@@ -222,6 +225,14 @@ fun OverviewScreen(
                 }
             }
         }
+    }
+
+    if (showAddChoice) {
+        AddItemMethodSheet(
+            onAddManually = { showAddDialog = true },
+            onScanBarcode = onScanBarcode,
+            onDismiss = { showAddChoice = false },
+        )
     }
 
     if (showAddDialog) {

@@ -17,7 +17,10 @@ internal val drinksConcepts: List<FoodConcept> = listOf(
         category = GroceryCategory.DRINKS,
         displayName = "Juice",
         iconRes = R.drawable.ic_food_juice,
-        keywords = listOf("apfelsaft", "orangensaft", "traubensaft", "traubensaf", "zitronensaft", "ananassaft", "birnensaft", "kirschsaft", "saft"),
+        // "pink grapef" is REWE's truncated "REWE Pink Grapefruit" juice; both grapefruit entries
+        // are longer than GRAPEFRUIT's own "grapefruit", so the juice wins the longest-first pass
+        // while a plain "Grapefruit" still resolves to the fruit.
+        keywords = listOf("apfelsaft", "orangensaft", "traubensaft", "traubensaf", "zitronensaft", "ananassaft", "birnensaft", "kirschsaft", "grapefruitsaft", "pink grapef", "saft"),
     ),
     FoodConcept(
         id = "SOFT_DRINK",
@@ -68,7 +71,8 @@ internal val drinksConcepts: List<FoodConcept> = listOf(
         category = GroceryCategory.DRINKS,
         displayName = "Wine",
         iconRes = R.drawable.ic_food_wine,
-        keywords = listOf("wein"),
+        // Spanish and Portuguese reds ("Mederano Tinto") never carry the German word at all.
+        keywords = listOf("wein", "tinto"),
     ),
     FoodConcept(
         id = "SPARKLING_WINE",

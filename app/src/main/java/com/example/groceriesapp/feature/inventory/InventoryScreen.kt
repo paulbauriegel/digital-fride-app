@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Inventory2
+import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SwapVert
@@ -79,10 +80,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.draw.clip
 import com.example.groceriesapp.data.ConsumptionReason
-import com.example.groceriesapp.data.FillLevel
 import com.example.groceriesapp.data.InventoryItem
 import com.example.groceriesapp.data.taxonomy.FoodConceptCatalog
 import com.example.groceriesapp.data.taxonomy.GroceryCategory
+import com.example.groceriesapp.data.fillFraction
 import com.example.groceriesapp.data.isCountable
 import com.example.groceriesapp.data.taxonomy.StorageLocation
 import com.example.groceriesapp.data.taxonomy.resolveCategory
@@ -91,8 +92,9 @@ import com.example.groceriesapp.data.household.Household
 import com.example.groceriesapp.ui.components.EmptyStateCard
 import com.example.groceriesapp.ui.components.GroceriesSearchBar
 import com.example.groceriesapp.ui.components.rememberGroceriesSearchState
-import com.example.groceriesapp.ui.components.FillLevelRing
+import com.example.groceriesapp.ui.components.RemainingAmountRing
 import com.example.groceriesapp.ui.expiryUrgency
+import com.example.groceriesapp.ui.formatAmount
 import com.example.groceriesapp.ui.formatQuantity
 import com.example.groceriesapp.ui.shortLabel
 import com.example.groceriesapp.ui.theme.spacing
@@ -112,15 +114,18 @@ fun InventoryScreen(
     locationRequest: StorageLocation?,
     onLocationRequestConsumed: () -> Unit,
     onAddItem: (InventoryItem) -> Unit,
+    onScanBarcode: () -> Unit,
     onRemoveItem: (String, ConsumptionReason?) -> Unit,
-    onMarkOpened: (String) -> Unit,
-    onSetLocation: (String, StorageLocation) -> Unit,
-    onSetFillLevel: (String, FillLevel?) -> Unit,
-    onSetConcept: (String, String) -> Unit,
+    onEditItem: (String) -> Unit,
     onAdjustQuantity: (String, Double) -> Unit,
     onUndoRemove: (InventoryItem) -> Unit,
-    otherHouseholds: List<Household>,
-    onMoveToHousehold: (String, String) -> Unit,
+    /**
+     * A one-shot note to show once the list is back on screen — currently only "moved to X" after
+     * the edit screen sends an item to another household. That row vanishes from this list, so
+     * without a word here it would just look like it disappeared.
+     */
+    pendingMessage: String?,
+    onPendingMessageConsumed: () -> Unit,
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -129,8 +134,8 @@ fun InventoryScreen(
     var category by rememberSaveable { mutableStateOf<GroceryCategory?>(null) }
     var locationFilter by rememberSaveable { mutableStateOf<StorageLocation?>(null) }
     var sortOrder by rememberSaveable { mutableStateOf(InventorySortOrder.EXPIRY) }
+    var showAddChoice by rememberSaveable { mutableStateOf(false) }
     var showAddDialog by rememberSaveable { mutableStateOf(false) }
-    var sheetItemId by rememberSaveable { mutableStateOf<String?>(null) }
     var removeItemId by rememberSaveable { mutableStateOf<String?>(null) }
 
     // Home's inventory-summary cards land here pre-filtered to one location.
@@ -194,6 +199,16 @@ fun InventoryScreen(
         }
     }
 
+    LaunchedEffect(pendingMessage) {
+        val message = pendingMessage ?: return@LaunchedEffect
+        onPendingMessageConsumed()
+        snackbarHostState.showSnackbar(
+            message = message,
+            withDismissAction = true,
+            duration = SnackbarDuration.Short,
+        )
+    }
+
     Scaffold(
         modifier = modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -216,8 +231,8 @@ fun InventoryScreen(
                             },
                         )
                     }
-                    IconButton(onClick = { showAddDialog = true }) {
-                        Icon(Icons.Default.Add, contentDescription = "Add item manually")
+                    IconButton(onClick = { showAddChoice = true }) {
+                        Icon(Icons.Default.Add, contentDescription = "Add item")
                     }
                     IconButton(onClick = onOpenSettings) {
                         Icon(Icons.Default.Settings, contentDescription = "Settings")
@@ -292,9 +307,10 @@ fun InventoryScreen(
             if (inventory.isEmpty()) {
                 EmptyStateCard(
                     title = "Your fridge is ready",
-                    body = "Scan a receipt to review and add groceries, or create an item manually.",
-                    actionLabel = "Add item manually",
-                    onAction = { showAddDialog = true },
+                    body = "Scan a receipt to review and add groceries, " +
+                        "or add an item by barcode or by hand.",
+                    actionLabel = "Add item",
+                    onAction = { showAddChoice = true },
                     icon = Icons.Default.Inventory2,
                     modifier = Modifier.padding(MaterialTheme.spacing.medium),
                 )
@@ -365,7 +381,7 @@ fun InventoryScreen(
                     items(filtered, key = InventoryItem::id) { item ->
                         SwipeableInventoryRow(
                             item = item,
-                            onClick = { sheetItemId = item.id },
+                            onClick = { onEditItem(item.id) },
                             onIncrement = { onAdjustQuantity(item.id, 1.0) },
                             onDecrement = { onAdjustQuantity(item.id, -1.0) },
                             onDelete = { removeItemId = item.id },
@@ -395,7 +411,7 @@ fun InventoryScreen(
                     item = item,
                     onClick = {
                         scope.launch { searchState.collapse() }
-                        sheetItemId = item.id
+                        onEditItem(item.id)
                     },
                     onIncrement = { onAdjustQuantity(item.id, 1.0) },
                     onDecrement = { onAdjustQuantity(item.id, -1.0) },
@@ -405,47 +421,20 @@ fun InventoryScreen(
         }
     }
 
+    if (showAddChoice) {
+        AddItemMethodSheet(
+            onAddManually = { showAddDialog = true },
+            onScanBarcode = onScanBarcode,
+            onDismiss = { showAddChoice = false },
+        )
+    }
+
     if (showAddDialog) {
         AddInventoryItemDialog(
             onDismiss = { showAddDialog = false },
             onSave = {
                 onAddItem(it)
                 showAddDialog = false
-            },
-        )
-    }
-
-    // Resolved from the live list so repository updates (location, fill level, opened) render
-    // immediately; the sheet dismisses itself when the item is removed.
-    val sheetItem = sheetItemId?.let { id -> inventory.firstOrNull { it.id == id } }
-    LaunchedEffect(sheetItemId, sheetItem) {
-        if (sheetItemId != null && sheetItem == null) sheetItemId = null
-    }
-    if (sheetItem != null) {
-        InventoryItemSheet(
-            item = sheetItem,
-            onDismiss = { sheetItemId = null },
-            onSetLocation = { location -> onSetLocation(sheetItem.id, location) },
-            onSetFillLevel = { level -> onSetFillLevel(sheetItem.id, level) },
-            onSetConcept = { conceptId -> onSetConcept(sheetItem.id, conceptId) },
-            onMarkOpened = { onMarkOpened(sheetItem.id) },
-            onRemove = { reason ->
-                onRemoveItem(sheetItem.id, reason)
-                sheetItemId = null
-            },
-            otherHouseholds = otherHouseholds,
-            onMoveToHousehold = { householdId ->
-                onMoveToHousehold(sheetItem.id, householdId)
-                sheetItemId = null
-                // The row disappears from this household's list, so say where it went.
-                val name = otherHouseholds.firstOrNull { it.id == householdId }?.name
-                scope.launch {
-                    snackbarHostState.showSnackbar(
-                        message = "${sheetItem.name} moved to ${name ?: "the other household"}",
-                        withDismissAction = true,
-                        duration = SnackbarDuration.Short,
-                    )
-                }
             },
         )
     }
@@ -667,10 +656,9 @@ private fun InventoryRow(
                     )
                 }
             }
-            FillLevelRing(
-                fillLevel = item.fillLevel?.let { level ->
-                    FillLevel.entries.firstOrNull { it.name == level }
-                },
+            RemainingAmountRing(
+                fraction = item.fillFraction,
+                label = "${formatAmount(item.quantity, item.unit)} left",
             )
             if (item.isCountable) {
                 IconButton(onClick = onIncrement) {
@@ -694,17 +682,36 @@ private fun InventoryRow(
     }
 }
 
+/**
+ * What a barcode scan knows about an item before the user confirms it. A [barcode] with everything
+ * else empty is the normal shape when Open Food Facts has never heard of the pack.
+ */
+internal data class InventoryItemPrefill(
+    val barcode: String,
+    val name: String = "",
+    val quantity: Double? = null,
+    val unit: String? = null,
+)
+
 @Composable
 internal fun AddInventoryItemDialog(
     onDismiss: () -> Unit,
     onSave: (InventoryItem) -> Unit,
+    prefill: InventoryItemPrefill? = null,
+    notice: String? = null,
 ) {
-    var name by rememberSaveable { mutableStateOf("") }
-    var quantity by rememberSaveable { mutableStateOf("1") }
+    // Keyed on the barcode so scanning a second pack without leaving the screen starts clean
+    // instead of keeping the previous product's name.
+    var name by rememberSaveable(prefill?.barcode) { mutableStateOf(prefill?.name.orEmpty()) }
+    var quantity by rememberSaveable(prefill?.barcode) {
+        mutableStateOf(prefill?.quantity?.let(::formatQuantity) ?: "1")
+    }
     // No unit is prefilled — "pc" would silently mislabel weight-packed goods.
-    var unit by rememberSaveable { mutableStateOf("") }
+    var unit by rememberSaveable(prefill?.barcode) { mutableStateOf(prefill?.unit.orEmpty()) }
     // Derived from the name until the user picks a chip, so typing "Vollmilch" lands in Dairy.
-    var chosenCategory by rememberSaveable { mutableStateOf<GroceryCategory?>(null) }
+    var chosenCategory by rememberSaveable(prefill?.barcode) {
+        mutableStateOf<GroceryCategory?>(null)
+    }
     val concept = remember(name) { FoodConceptCatalog.match(name) }
     val category = chosenCategory ?: concept?.category ?: GroceryCategory.OTHER
     val focusManager = LocalFocusManager.current
@@ -723,16 +730,33 @@ internal fun AddInventoryItemDialog(
                 unit = unit.trim().ifBlank { null },
                 category = category.name,
                 foodConceptId = concept?.id.takeIf { category == concept?.category },
+                barcode = prefill?.barcode,
+                // A scanned pack starts out full, so what it holds is what Open Food Facts
+                // reported — but only while the unit is still the one that figure was given in.
+                packageSize = prefill?.quantity
+                    ?.takeIf { unit.trim().equals(prefill.unit, ignoreCase = true) },
             ),
         )
     }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        icon = { Icon(Icons.Default.Inventory2, contentDescription = null) },
-        title = { Text("Add item") },
+        icon = {
+            Icon(
+                if (prefill != null) Icons.Default.QrCodeScanner else Icons.Default.Inventory2,
+                contentDescription = null,
+            )
+        },
+        title = { Text(if (prefill != null) "Confirm scanned item" else "Add item") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small)) {
+                notice?.let {
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },

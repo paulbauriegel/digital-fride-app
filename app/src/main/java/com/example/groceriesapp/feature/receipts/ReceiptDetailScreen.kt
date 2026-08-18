@@ -1,6 +1,7 @@
 package com.example.groceriesapp.feature.receipts
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,6 +17,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material3.AlertDialog
@@ -70,9 +72,12 @@ fun ReceiptDetailScreen(
     onManageItems: () -> Unit,
     onShare: () -> Unit,
     onDelete: () -> Unit,
+    onRenameMerchant: (String?) -> Unit,
+    merchantSuggestions: List<String>,
     modifier: Modifier = Modifier,
 ) {
     var showDeleteDialog by rememberSaveable { mutableStateOf(false) }
+    var showRenameDialog by rememberSaveable { mutableStateOf(false) }
     var menuOpen by remember { mutableStateOf(false) }
     val hasImage = receipt.tilePaths.isNotEmpty() || receipt.originalFramePaths.isNotEmpty()
     val importedCount = receipt.items.count { it.id in receipt.importedItemIds }
@@ -97,6 +102,13 @@ fun ReceiptDetailScreen(
                             expanded = menuOpen,
                             onDismissRequest = { menuOpen = false },
                         ) {
+                            DropdownMenuItem(
+                                text = { Text("Rename store") },
+                                onClick = {
+                                    menuOpen = false
+                                    showRenameDialog = true
+                                },
+                            )
                             if (hasImage) {
                                 DropdownMenuItem(
                                     text = { Text("Share") },
@@ -163,11 +175,27 @@ fun ReceiptDetailScreen(
                     verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.extraSmall),
                 ) {
                     MerchantBadge(receipt.merchant, size = 56.dp)
-                    Text(
-                        receipt.merchant ?: "Unrecognized receipt",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                    )
+                    // A misread store line is common enough that the name itself is the edit
+                    // affordance; the overflow menu carries the same action.
+                    Row(
+                        modifier = Modifier.clickable { showRenameDialog = true },
+                        horizontalArrangement = Arrangement.spacedBy(
+                            MaterialTheme.spacing.extraSmall,
+                        ),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            receipt.merchant ?: "Unrecognized receipt",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        Icon(
+                            Icons.Default.Edit,
+                            contentDescription = "Rename store",
+                            modifier = Modifier.size(18.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                     Text(
                         formatCurrency(receipt.totalCents, receipt.currency),
                         style = MaterialTheme.typography.headlineLarge,
@@ -253,6 +281,18 @@ fun ReceiptDetailScreen(
                 }
             }
         }
+    }
+
+    if (showRenameDialog) {
+        RenameMerchantDialog(
+            currentMerchant = receipt.merchant,
+            suggestions = merchantSuggestions,
+            onConfirm = { merchant ->
+                showRenameDialog = false
+                onRenameMerchant(merchant)
+            },
+            onDismiss = { showRenameDialog = false },
+        )
     }
 
     if (showDeleteDialog) {

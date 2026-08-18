@@ -52,6 +52,35 @@ class OpenAiRecipePromptsTest {
     }
 
     @Test
+    fun `request content asks for one recipe and keeps the inventory subordinate`() {
+        val content = OpenAiRecipePrompts.requestUserContent(
+            request = "  lasagne for four  ",
+            inventoryPrompt = "TOMATO | Tomaten | 500.0 g | Fridge | -",
+            hasPhoto = false,
+        )
+
+        assertTrue(content.contains("exactly ONE recipe"))
+        // Its own line, and trimmed: the model never sees the stray whitespace as part of the brief.
+        assertTrue(content.lines().contains("lasagne for four"))
+        assertTrue(content.contains("even when the inventory does not cover it"))
+        assertTrue(content.contains("TOMATO | Tomaten"))
+        assertTrue(content.lines().none { it.contains("attached photo") })
+    }
+
+    @Test
+    fun `request content describes the photo when one is attached`() {
+        val content = OpenAiRecipePrompts.requestUserContent(
+            request = "",
+            inventoryPrompt = "",
+            hasPhoto = true,
+        )
+
+        assertTrue(content.contains("attached photo"))
+        // A photo-only request must not leave an empty "asked for" section behind.
+        assertTrue(content.lines().none { it == "What the user asked for:" })
+    }
+
+    @Test
     fun `schema requires the recipe fields`() {
         val schema = OpenAiRecipePrompts.buildSchema()
 

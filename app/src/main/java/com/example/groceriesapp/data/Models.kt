@@ -182,12 +182,17 @@ enum class LocationSource {
     USER,
 }
 
-/** Coarse remaining-amount state. Null on an item means the amount isn't tracked. */
-enum class FillLevel(val displayName: String) {
-    FULL("Full"),
-    HALF("Half"),
-    LOW("Low"),
-    EMPTY("Empty"),
+/**
+ * How an [InventoryItem.category] came to be set. The same shape as [LocationSource], and for the
+ * same reason: the launch normalize pass re-derives the category from the name-matched food
+ * concept every time, so without a marker a hand-picked category reverts within one app start.
+ */
+enum class CategorySource {
+    /** Derived from the item's food concept; tracks it, so catalogue fixes propagate. */
+    DERIVED,
+
+    /** Chosen by the user for this row; never re-derived. */
+    USER,
 }
 
 /** One receipt item the user chose to import, with the storage location it should land in. */
@@ -200,6 +205,8 @@ data class ReceiptItemSelection(
 data class InventoryItem(
     val name: String,
     val category: String? = null,
+    /** [CategorySource] name; DERIVED categories track the concept, USER ones are never re-derived. */
+    val categorySource: String? = null,
     val foodConceptId: String? = null,
     val quantity: Double = 1.0,
     val unit: String? = null,
@@ -210,8 +217,16 @@ data class InventoryItem(
     val locationSource: String? = null,
     /** When the item last moved between locations; re-anchors the expiry estimate. */
     val locationChangedAtEpochMillis: Long? = null,
-    /** [FillLevel] name, or null when the remaining amount isn't tracked. */
-    val fillLevel: String? = null,
+    /**
+     * What a full one holds, in the same [unit] as [quantity] — the "of 1 L" the amount is read
+     * against, the top of the edit screen's scale, and the base for its percentage presets.
+     * [quantity] is what is *left* of it, so `quantity / packageSize` is how full the item is.
+     *
+     * Null means the amount isn't tracked: a bare receipt line whose unit nothing recognised, or a
+     * row the user has never touched. Untracked is a real state, not a missing value — filling it
+     * in as "100% full" would put a fill indicator on every row in the list.
+     */
+    val packageSize: Double? = null,
     val purchasedAtEpochMillis: Long? = null,
     /** Earliest edge of the estimated window, or the exact date when read off packaging. */
     val expiresAtEpochMillis: Long? = null,
@@ -224,6 +239,13 @@ data class InventoryItem(
     val printedDateType: String? = null,
     val receiptId: String? = null,
     val receiptItemId: String? = null,
+    /**
+     * EAN/UPC read by the barcode scanner; null for manual and receipt-imported rows.
+     *
+     * Deliberately unvalidated: loadArray drops rows whose parse throws, so rejecting an odd code
+     * here would delete a real inventory row over a field nothing depends on.
+     */
+    val barcode: String? = null,
     val addedAtEpochMillis: Long = System.currentTimeMillis(),
     val id: String = UUID.randomUUID().toString(),
 ) {
@@ -231,6 +253,12 @@ data class InventoryItem(
         require(name.isNotBlank()) { "Inventory item name must not be blank." }
         require(quantity.isFinite() && quantity > 0.0) { "Quantity must be finite and positive." }
         require(id.isNotBlank()) { "Inventory item ID must not be blank." }
+        // Deliberately permissive about packageSize vs quantity: a refilled canister legitimately
+        // holds more than the pack it came from, and loadArray drops rows whose parse throws, so
+        // an over-strict rule here would delete real inventory rather than reject one field.
+        require(packageSize == null || (packageSize.isFinite() && packageSize > 0.0)) {
+            "Package size must be finite and positive when set."
+        }
     }
 }
 
@@ -244,6 +272,17 @@ val InventoryItem.isCountable: Boolean
         unit?.trim()?.lowercase() in COUNTABLE_UNITS
 
 internal val COUNTABLE_UNITS = setOf("pc", "pcs", "st", "st.", "stk", "stk.", "stück", "x")
+
+/**
+ * How full the item is, 0f..1f, or null when the amount isn't tracked. Clamped rather than
+ * validated: a top-up can push [InventoryItem.quantity] past the pack it was bought in, and a
+ * gauge reading 110% is worse than one reading full.
+ */
+val InventoryItem.fillFraction: Float?
+    get() {
+        val full = packageSize?.takeIf { it > 0.0 } ?: return null
+        return (quantity / full).toFloat().coerceIn(0f, 1f)
+    }
 
 data class ScanSession(
     val id: String,

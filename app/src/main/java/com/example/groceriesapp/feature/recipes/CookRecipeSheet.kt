@@ -32,13 +32,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
-import com.example.groceriesapp.data.FillLevel
 import com.example.groceriesapp.data.InventoryItem
 import com.example.groceriesapp.data.isCountable
 import com.example.groceriesapp.data.recipes.CookConsumption
 import com.example.groceriesapp.data.recipes.CookPlanner
 import com.example.groceriesapp.data.recipes.RecipeMatch
 import com.example.groceriesapp.data.taxonomy.resolveIconRes
+import com.example.groceriesapp.ui.formatAmount
 import com.example.groceriesapp.ui.formatQuantity
 import com.example.groceriesapp.ui.theme.spacing
 
@@ -52,8 +52,8 @@ private class CookRowState(
 
     /** What "used some" maps back to after toggling away from "used up". */
     val someConsumption: CookConsumption
-        get() = defaultConsumption as? CookConsumption.StepFillLevel
-            ?: CookConsumption.StepFillLevel(item.id, FillLevel.LOW)
+        get() = defaultConsumption as? CookConsumption.UseSome
+            ?: CookPlanner.stepDown(item)
 }
 
 /**
@@ -184,7 +184,7 @@ private fun CookRow(row: CookRowState) {
                     Icon(Icons.Default.Add, contentDescription = "Use one more")
                 }
             }
-            is CookConsumption.StepFillLevel, is CookConsumption.RemoveAll -> {
+            is CookConsumption.UseSome, is CookConsumption.RemoveAll -> {
                 val usedUp = consumption is CookConsumption.RemoveAll
                 FilterChip(
                     modifier = Modifier.minimumInteractiveComponentSize(),
@@ -208,6 +208,6 @@ private fun CookConsumption.describe(item: InventoryItem): String = when (this) 
         val unit = item.unit?.takeIf(String::isNotBlank)?.let { " $it" }.orEmpty()
         "Use ${formatQuantity(amount)}$unit of ${formatQuantity(item.quantity)}$unit"
     }
-    is CookConsumption.StepFillLevel -> "Mark as ${newLevel.displayName.lowercase()}"
+    is CookConsumption.UseSome -> "Leave ${formatAmount(newQuantity, item.unit)}"
     is CookConsumption.RemoveAll -> "Remove from inventory"
 }

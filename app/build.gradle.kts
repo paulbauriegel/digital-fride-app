@@ -75,7 +75,18 @@ dependencies {
     implementation("org.opencv:opencv:4.13.0")
     implementation("androidx.exifinterface:exifinterface:1.3.6")
 
+    // 1.4.x deliberately: the barcode scanner binds through ProcessCameraProvider.getInstance's
+    // ListenableFuture, and the suspending awaitInstance replacement only exists from 1.5.
+    val cameraX = "1.4.2"
+    implementation("androidx.camera:camera-core:$cameraX")
+    implementation("androidx.camera:camera-camera2:$cameraX")
+    implementation("androidx.camera:camera-lifecycle:$cameraX")
+    implementation("androidx.camera:camera-view:$cameraX")
+
     implementation("com.google.mlkit:text-recognition:16.0.1")
+    // Bundled model rather than play-services-mlkit-*: no on-demand download, so the first scan
+    // works offline and on devices without Play Services.
+    implementation("com.google.mlkit:barcode-scanning:17.3.0")
     implementation("com.google.ai.edge.litert:litert:2.1.6")
     implementation("com.google.ai.edge.litertlm:litertlm-android:0.14.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")

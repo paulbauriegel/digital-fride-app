@@ -18,6 +18,8 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.RestaurantMenu
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -25,6 +27,7 @@ import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -46,6 +49,7 @@ import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.groceriesapp.data.GroceriesRepository
+import com.example.groceriesapp.data.InventoryItem
 import com.example.groceriesapp.data.BioCompanyRepository
 import com.example.groceriesapp.data.ReweRepository
 import com.example.groceriesapp.data.household.HouseholdRepository
@@ -60,12 +64,19 @@ import com.example.groceriesapp.feature.recipes.RecipeEditorScreen
 import com.example.groceriesapp.feature.recipes.RecipesScreen
 import com.example.groceriesapp.feature.recipes.decodeOrientedBitmap
 import java.time.LocalDate
+import com.example.groceriesapp.data.network.OpenFoodFactsProduct
 import com.example.groceriesapp.data.network.ReweAuthRequest
+import com.example.groceriesapp.data.products.ProductLookupRepository
+import com.example.groceriesapp.data.products.ProductLookupState
 import com.example.groceriesapp.feature.biocompany.BioCompanyReceiptsScreen
 import com.example.groceriesapp.feature.rewe.ReweLoginScreen
 import com.example.groceriesapp.feature.rewe.ReweReceiptsScreen
 import kotlinx.coroutines.launch
 import com.example.groceriesapp.feature.insights.InsightsScreen
+import com.example.groceriesapp.feature.inventory.AddInventoryItemDialog
+import com.example.groceriesapp.feature.inventory.BarcodeScannerScreen
+import com.example.groceriesapp.feature.inventory.EditInventoryItemScreen
+import com.example.groceriesapp.feature.inventory.InventoryItemPrefill
 import com.example.groceriesapp.feature.inventory.InventoryScreen
 import com.example.groceriesapp.feature.more.SettingsScreen
 import com.example.groceriesapp.feature.overview.OverviewScreen
@@ -103,6 +114,7 @@ fun GroceriesApp(
     recipesRepository: RecipesRepository,
     bioCompanyRepository: BioCompanyRepository,
     reweRepository: ReweRepository,
+    productLookupRepository: ProductLookupRepository,
     widthSizeClass: WindowWidthSizeClass,
     userName: String?,
     onUserNameChanged: (String?) -> Unit,
@@ -131,7 +143,7 @@ fun GroceriesApp(
     val favoriteRecipeIds by recipesRepository.favoriteIds.collectAsStateWithLifecycle()
     val aiRecipeState by recipesRepository.aiState.collectAsStateWithLifecycle()
     val recipeImportDraft by recipesRepository.importDraft.collectAsStateWithLifecycle()
-    val lastAdaptedRecipeId by recipesRepository.lastAdaptedRecipeId.collectAsStateWithLifecycle()
+    val lastAiRecipeId by recipesRepository.lastAiRecipeId.collectAsStateWithLifecycle()
     val recipeImageVersion by recipesRepository.imageVersion.collectAsStateWithLifecycle()
     var destination by rememberSaveable { mutableStateOf(TopLevelDestination.OVERVIEW) }
     // Overlays below (recipe detail, editor, settings, …) return early and drop the tab subtree.
@@ -148,10 +160,17 @@ fun GroceriesApp(
     // The receipt stack is three stacked overlays: Details underneath, with either the item
     // import flow or the image viewer on top. Checked in top-down order below.
     var receiptDetailId by rememberSaveable { mutableStateOf<String?>(null) }
+    var editItemId by rememberSaveable { mutableStateOf<String?>(null) }
+    var inventoryMessage by rememberSaveable { mutableStateOf<String?>(null) }
     var importItemsReceiptId by rememberSaveable { mutableStateOf<String?>(null) }
     var receiptViewerId by rememberSaveable { mutableStateOf<String?>(null) }
     // Home's inventory-summary cards open the Inventory tab pre-filtered to one location.
     var inventoryLocationRequest by remember { mutableStateOf<StorageLocation?>(null) }
+    var barcodeScanOpen by rememberSaveable { mutableStateOf(false) }
+    // Set the moment a barcode is read; the confirm dialog stays up until the item is saved or
+    // dropped, whatever the lookup came back with.
+    var scannedBarcode by rememberSaveable { mutableStateOf<String?>(null) }
+    val productLookup by productLookupRepository.state.collectAsStateWithLifecycle()
     var showBioCompanyImport by remember { mutableStateOf(false) }
     var showReweImport by remember { mutableStateOf(false) }
     var reweAuthRequest by remember { mutableStateOf<ReweAuthRequest?>(null) }
@@ -172,7 +191,12 @@ fun GroceriesApp(
         scanKey = UUID.randomUUID().toString()
     }
 
-    val aiEnabled = remember(destination, aiRecipeState) { recipesRepository.aiEnabled() }
+    // Key presence is a one-shot prefs read, not a flow, so it has to be re-read whenever it could
+    // have changed. `showSettings` is load-bearing: Settings is an overlay, not a destination, so
+    // without it a key pasted there stays invisible until the tab changes or the app restarts.
+    val aiEnabled = remember(destination, aiRecipeState, showSettings) {
+        recipesRepository.aiEnabled()
+    }
     val aiBusy = aiRecipeState is com.example.groceriesapp.data.recipes.AiRecipeState.Loading
     val aiError =
         (aiRecipeState as? com.example.groceriesapp.data.recipes.AiRecipeState.Error)?.message
@@ -203,17 +227,18 @@ fun GroceriesApp(
         recipeImportCameraLauncher.launch(uri)
     }
 
-    // A finished photo import opens the editor prefilled; a finished adaptation opens its recipe.
+    // A finished photo import opens the editor prefilled; an adapted or requested recipe opens
+    // straight into its detail screen.
     androidx.compose.runtime.LaunchedEffect(recipeImportDraft) {
         if (recipeImportDraft != null) {
             editorRecipeId = null
             recipeEditorOpen = true
         }
     }
-    androidx.compose.runtime.LaunchedEffect(lastAdaptedRecipeId) {
-        lastAdaptedRecipeId?.let { id ->
+    androidx.compose.runtime.LaunchedEffect(lastAiRecipeId) {
+        lastAiRecipeId?.let { id ->
             openRecipeId = id
-            recipesRepository.clearLastAdaptedRecipeId()
+            recipesRepository.clearLastAiRecipeId()
         }
     }
 
@@ -243,13 +268,28 @@ fun GroceriesApp(
         return
     }
 
+    // Below the receipt scanner deliberately: that branch returns early, so ARCore and CameraX can
+    // never hold the camera at the same time.
+    if (barcodeScanOpen) {
+        BackHandler { barcodeScanOpen = false }
+        BarcodeScannerScreen(
+            onBarcode = { code ->
+                barcodeScanOpen = false
+                scannedBarcode = code
+                productLookupRepository.lookup(code)
+            },
+            onClose = { barcodeScanOpen = false },
+        )
+        return
+    }
+
     if (showBioCompanyImport) {
         val bioCompanyEntries by bioCompanyRepository.receipts.collectAsStateWithLifecycle()
         BioCompanyReceiptsScreen(
             entries = bioCompanyEntries,
             onBack = { showBioCompanyImport = false },
             groceryRepository = repository,
-            fetchDetail = { entry -> bioCompanyRepository.fetchReceiptDetail(entry) },
+            bioCompanyRepository = bioCompanyRepository,
         )
         return
     }
@@ -320,6 +360,17 @@ fun GroceriesApp(
         }
     }
 
+    // Store names already in use, most-used first: correcting a misread name should snap to a
+    // spelling the library already has instead of adding another near-duplicate.
+    val merchantSuggestions = remember(receipts) {
+        receipts.mapNotNull { it.merchant?.takeIf(String::isNotBlank) }
+            .groupingBy { it }
+            .eachCount()
+            .entries
+            .sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key })
+            .map { it.key }
+    }
+
     // The image viewer/editor also stacks on Details ("View receipt").
     val activeViewerId = receiptViewerId
     if (activeViewerId != null) {
@@ -337,6 +388,10 @@ fun GroceriesApp(
                     receiptDetailId = null
                 },
                 onRescan = ::beginScan,
+                onRenameMerchant = { merchant ->
+                    repository.saveReceipt(receipt.copy(merchant = merchant))
+                },
+                merchantSuggestions = merchantSuggestions,
                 onApplyImageEdit = { edit ->
                     val updatedReceipt = ReceiptImageEditor().apply(receipt, edit)
                     repository.saveReceipt(updatedReceipt)
@@ -371,11 +426,54 @@ fun GroceriesApp(
                     repository.deleteReceipt(receipt.id)
                     receiptDetailId = null
                 },
+                onRenameMerchant = { merchant ->
+                    repository.saveReceipt(receipt.copy(merchant = merchant))
+                },
+                merchantSuggestions = merchantSuggestions,
             )
             return
         }
         androidx.compose.runtime.LaunchedEffect(activeDetailId) {
             receiptDetailId = null
+        }
+    }
+
+    // Same shape as the receipt-detail overlay above: hold only the id, resolve the item from the
+    // live list each recomposition, and self-heal when it disappears — removed, consumed, or moved
+    // to another household — so the editor can never outlive its subject.
+    val activeEditItemId = editItemId
+    if (activeEditItemId != null) {
+        val editItem = inventory.firstOrNull { it.id == activeEditItemId }
+        if (editItem != null) {
+            BackHandler { editItemId = null }
+            EditInventoryItemScreen(
+                item = editItem,
+                otherHouseholds = otherHouseholds,
+                onBack = { editItemId = null },
+                onRename = { repository.renameInventoryItem(editItem.id, it) },
+                onSetCategory = { repository.setInventoryItemCategory(editItem.id, it) },
+                onSetConcept = { repository.setInventoryItemFoodConcept(editItem.id, it) },
+                onSetLocation = { repository.setInventoryItemStorageLocation(editItem.id, it) },
+                onSetExpiryDate = { repository.setInventoryItemExpiryDate(editItem.id, it) },
+                onSetAmount = { repository.setInventoryItemAmount(editItem.id, it) },
+                onSetPackageSize = { repository.setInventoryItemPackageSize(editItem.id, it) },
+                onMarkOpened = { repository.markInventoryItemOpened(editItem.id) },
+                onRemove = { reason ->
+                    repository.removeInventoryItem(editItem.id, reason)
+                    editItemId = null
+                },
+                onMoveToHousehold = { householdId ->
+                    repository.moveInventoryItemToHousehold(editItem.id, householdId)
+                    val name = otherHouseholds.firstOrNull { it.id == householdId }?.name
+                    inventoryMessage =
+                        "${editItem.name} moved to ${name ?: "the other household"}"
+                    editItemId = null
+                },
+            )
+            return
+        }
+        androidx.compose.runtime.LaunchedEffect(activeEditItemId) {
+            editItemId = null
         }
     }
 
@@ -478,9 +576,11 @@ fun GroceriesApp(
                 } else {
                     null
                 },
-                onDelete = if (recipe.source == RecipeSource.USER) {
+                // Curated recipes ship with the app and would come straight back on the next
+                // start, so only the two locally-owned sources offer a delete.
+                onDelete = if (recipe.source != RecipeSource.CURATED) {
                     {
-                        recipesRepository.deleteUserRecipe(recipe.id)
+                        recipesRepository.deleteRecipe(recipe.id)
                         openRecipeId = null
                     }
                 } else {
@@ -524,6 +624,7 @@ fun GroceriesApp(
                 reweConnected = reweAccount != null,
                 onImportRewe = { showReweImport = true },
                 onScan = ::beginScan,
+                onScanBarcode = { barcodeScanOpen = true },
                 onDestination = { destination = it },
                 onOpenInventoryAt = { location ->
                     inventoryLocationRequest = location
@@ -532,6 +633,9 @@ fun GroceriesApp(
                 inventoryLocationRequest = inventoryLocationRequest,
                 onInventoryLocationRequestConsumed = { inventoryLocationRequest = null },
                 onOpenReceipt = { receiptDetailId = it },
+                onEditItem = { editItemId = it },
+                inventoryMessage = inventoryMessage,
+                onInventoryMessageConsumed = { inventoryMessage = null },
                 onOpenSettings = { showSettings = true },
                 recipesRepository = recipesRepository,
                 userRecipes = userRecipes,
@@ -614,6 +718,69 @@ fun GroceriesApp(
             )
         }
     }
+
+    // A dialog rather than another early-return overlay: the scan can start from Home or from
+    // Inventory, and confirming it should leave that tab where it was underneath.
+    val pendingBarcode = scannedBarcode
+    if (pendingBarcode != null) {
+        val dismiss = {
+            scannedBarcode = null
+            productLookupRepository.clear()
+        }
+        val lookup = productLookup
+        if (lookup is ProductLookupState.Loading) {
+            BarcodeLookupProgressDialog(barcode = pendingBarcode, onCancel = dismiss)
+        } else {
+            AddInventoryItemDialog(
+                prefill = inventoryItemPrefill(
+                    barcode = pendingBarcode,
+                    // A pack already in the inventory outranks Open Food Facts: whatever the user
+                    // called it last time is what they will recognise in the list.
+                    known = repository.inventoryItemByBarcode(pendingBarcode),
+                    product = (lookup as? ProductLookupState.Found)?.product,
+                ),
+                notice = when (lookup) {
+                    is ProductLookupState.NotFound ->
+                        "Open Food Facts does not know this barcode — add the details yourself."
+                    is ProductLookupState.Error -> lookup.message
+                    else -> null
+                },
+                onDismiss = dismiss,
+                onSave = { item ->
+                    repository.addInventoryItem(item)
+                    dismiss()
+                },
+            )
+        }
+    }
+}
+
+/** What the confirm dialog opens with. Never empty — the barcode alone is still worth keeping. */
+private fun inventoryItemPrefill(
+    barcode: String,
+    known: InventoryItem?,
+    product: OpenFoodFactsProduct?,
+): InventoryItemPrefill = InventoryItemPrefill(
+    barcode = barcode,
+    name = known?.name ?: product?.name.orEmpty(),
+    quantity = known?.packageSize ?: product?.quantity,
+    unit = known?.unit ?: product?.unit,
+)
+
+@Composable
+private fun BarcodeLookupProgressDialog(
+    barcode: String,
+    onCancel: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onCancel,
+        icon = { CircularProgressIndicator() },
+        title = { Text("Looking up the product") },
+        text = { Text("Barcode $barcode") },
+        confirmButton = {
+            TextButton(onClick = onCancel) { Text("Cancel") }
+        },
+    )
 }
 
 private class ScanViewModelStoreOwner : ViewModelStoreOwner {
@@ -637,11 +804,15 @@ private fun TopLevelContent(
     reweConnected: Boolean,
     onImportRewe: () -> Unit,
     onScan: () -> Unit,
+    onScanBarcode: () -> Unit,
     onDestination: (TopLevelDestination) -> Unit,
     onOpenInventoryAt: (StorageLocation?) -> Unit,
     inventoryLocationRequest: StorageLocation?,
     onInventoryLocationRequestConsumed: () -> Unit,
     onOpenReceipt: (String) -> Unit,
+    onEditItem: (String) -> Unit,
+    inventoryMessage: String?,
+    onInventoryMessageConsumed: () -> Unit,
     onOpenSettings: () -> Unit,
     recipesRepository: RecipesRepository,
     userRecipes: List<Recipe>,
@@ -671,6 +842,7 @@ private fun TopLevelContent(
                 imageVersion = recipeImageVersion,
                 onScanReceipt = onScan,
                 onAddItem = repository::addInventoryItem,
+                onScanBarcode = onScanBarcode,
                 onOpenInventory = onOpenInventoryAt,
                 onOpenRecipes = { onDestination(TopLevelDestination.RECIPES) },
                 onOpenRecipe = onOpenRecipe,
@@ -682,25 +854,15 @@ private fun TopLevelContent(
                 locationRequest = inventoryLocationRequest,
                 onLocationRequestConsumed = onInventoryLocationRequestConsumed,
                 onAddItem = repository::addInventoryItem,
+                onScanBarcode = onScanBarcode,
                 onRemoveItem = { id, reason -> repository.removeInventoryItem(id, reason) },
-                onMarkOpened = repository::markInventoryItemOpened,
-                onSetLocation = { id, location ->
-                    repository.setInventoryItemStorageLocation(id, location)
-                },
-                onSetFillLevel = { id, level ->
-                    repository.setInventoryItemFillLevel(id, level)
-                },
-                onSetConcept = { id, conceptId ->
-                    repository.setInventoryItemFoodConcept(id, conceptId)
-                },
+                onEditItem = onEditItem,
+                pendingMessage = inventoryMessage,
+                onPendingMessageConsumed = onInventoryMessageConsumed,
                 onAdjustQuantity = { id, delta ->
                     repository.adjustInventoryItemQuantity(id, delta)
                 },
                 onUndoRemove = { item -> repository.restoreRemovedInventoryItem(item) },
-                otherHouseholds = otherHouseholds,
-                onMoveToHousehold = { itemId, householdId ->
-                    repository.moveInventoryItemToHousehold(itemId, householdId)
-                },
                 onOpenSettings = onOpenSettings,
                 modifier = Modifier.fillMaxSize(),
             )
@@ -721,6 +883,9 @@ private fun TopLevelContent(
                 onScanRecipeGallery = onScanRecipeGallery,
                 onImportRecipeUrl = onImportRecipeUrl,
                 onGenerateIdeas = { recipesRepository.generateIdeas(inventory) },
+                onGenerateRecipe = { request, photo ->
+                    recipesRepository.generateRecipeFromRequest(request, photo, inventory)
+                },
                 onOpenSettings = onOpenSettings,
                 modifier = Modifier.fillMaxSize(),
             )

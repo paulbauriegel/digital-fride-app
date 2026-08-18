@@ -6,6 +6,7 @@ import android.graphics.Matrix
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -38,6 +39,7 @@ import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.CropRotate
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Share
@@ -101,6 +103,7 @@ import androidx.compose.ui.unit.dp
 import com.example.groceriesapp.data.DigitalReceipt
 import com.example.groceriesapp.data.ReceiptImageEdit
 import com.example.groceriesapp.data.ReceiptTextRegion
+import com.example.groceriesapp.feature.receipts.RenameMerchantDialog
 import com.example.groceriesapp.ui.components.MerchantBadge
 import com.example.groceriesapp.ui.formatCurrency
 import com.example.groceriesapp.ui.formatReceiptTimestamp
@@ -128,10 +131,13 @@ fun ReceiptViewerScreen(
     onShare: () -> Unit,
     onDelete: () -> Unit,
     onRescan: () -> Unit,
+    onRenameMerchant: (String?) -> Unit,
+    merchantSuggestions: List<String>,
     onApplyImageEdit: suspend (ReceiptImageEdit) -> Unit,
     onRerunOcr: suspend () -> Unit,
 ) {
     var showDeleteDialog by rememberSaveable { mutableStateOf(false) }
+    var showRenameDialog by rememberSaveable { mutableStateOf(false) }
     var overflowMenuOpen by remember { mutableStateOf(false) }
     var showImageEditor by rememberSaveable { mutableStateOf(false) }
     var applyingImageEdit by rememberSaveable { mutableStateOf(false) }
@@ -208,6 +214,13 @@ fun ReceiptViewerScreen(
                             onDismissRequest = { overflowMenuOpen = false },
                         ) {
                             DropdownMenuItem(
+                                text = { Text("Rename store") },
+                                onClick = {
+                                    overflowMenuOpen = false
+                                    showRenameDialog = true
+                                },
+                            )
+                            DropdownMenuItem(
                                 text = { Text("Rescan") },
                                 onClick = {
                                     overflowMenuOpen = false
@@ -246,6 +259,7 @@ fun ReceiptViewerScreen(
             ) {
                 ReceiptHeader(
                     receipt = receipt,
+                    onRename = { showRenameDialog = true },
                     modifier = Modifier.padding(
                         start = MaterialTheme.spacing.medium,
                         end = MaterialTheme.spacing.medium,
@@ -266,6 +280,18 @@ fun ReceiptViewerScreen(
                 )
             }
         }
+    }
+
+    if (showRenameDialog) {
+        RenameMerchantDialog(
+            currentMerchant = receipt.merchant,
+            suggestions = merchantSuggestions,
+            onConfirm = { merchant ->
+                showRenameDialog = false
+                onRenameMerchant(merchant)
+            },
+            onDismiss = { showRenameDialog = false },
+        )
     }
 
     if (showImageEditor) {
@@ -793,6 +819,7 @@ private const val MIN_CROP_FRACTION = 0.05f
 @Composable
 private fun ReceiptHeader(
     receipt: DigitalReceipt,
+    onRename: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Row(
@@ -802,13 +829,28 @@ private fun ReceiptHeader(
     ) {
         MerchantBadge(receipt.merchant, size = 48.dp)
         Column(modifier = Modifier.weight(1f)) {
-            Text(
-                receipt.merchant ?: "Digital receipt",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            // Tapping the name is the shortcut for fixing a misread store line; the overflow
+            // menu carries the same action for discoverability.
+            Row(
+                modifier = Modifier.clickable(onClick = onRename),
+                horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.extraSmall),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    receipt.merchant ?: "Digital receipt",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                Icon(
+                    Icons.Default.Edit,
+                    contentDescription = "Rename store",
+                    modifier = Modifier.size(18.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             Text(
                 formatReceiptTimestamp(receipt.dateEpochMillis, receipt.createdAtEpochMillis),
                 style = MaterialTheme.typography.bodyMedium,

@@ -29,7 +29,12 @@ class OpenAiChatClient(
         .build(),
     private val endpoint: String = "${OpenAiKeyStore.DEFAULT_API_BASE}/chat/completions",
 ) {
-    /** Returns the assistant message content. Blocking; call from Dispatchers.IO. */
+    /**
+     * Returns the assistant message content. Blocking; call from Dispatchers.IO.
+     *
+     * [imageDataUrls] are `data:image/...;base64,…` URLs sent alongside [userContent]; the model
+     * must be a vision-capable one. Empty (the common case) keeps the plain-string content shape.
+     */
     fun completeStructured(
         apiKey: String,
         model: String,
@@ -37,14 +42,30 @@ class OpenAiChatClient(
         userContent: String,
         schemaName: String,
         schema: JSONObject,
+        imageDataUrls: List<String> = emptyList(),
     ): String {
+        val userMessageContent: Any = if (imageDataUrls.isEmpty()) {
+            userContent
+        } else {
+            JSONArray()
+                .put(JSONObject().put("type", "text").put("text", userContent))
+                .also { parts ->
+                    imageDataUrls.forEach { url ->
+                        parts.put(
+                            JSONObject()
+                                .put("type", "image_url")
+                                .put("image_url", JSONObject().put("url", url)),
+                        )
+                    }
+                }
+        }
         val body = JSONObject()
             .put("model", model)
             .put(
                 "messages",
                 JSONArray()
                     .put(JSONObject().put("role", "system").put("content", systemPrompt))
-                    .put(JSONObject().put("role", "user").put("content", userContent)),
+                    .put(JSONObject().put("role", "user").put("content", userMessageContent)),
             )
             .put(
                 "response_format",

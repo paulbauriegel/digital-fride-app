@@ -9,6 +9,17 @@ enum class ExpirySource {
 
     /** A coarse per-category window, used when the concept itself isn't covered. */
     CATEGORY_FALLBACK,
+
+    /**
+     * A date the user set by hand. Sticky: never re-estimated over, the same contract
+     * [com.example.groceriesapp.data.LocationSource.USER] has for storage locations. Exact, so it
+     * carries no range.
+     *
+     * The guard lives in the repository's `withEstimatedExpiry`, deliberately not in
+     * [ExpiryEstimator.estimate] — `estimate` short-circuits on a printed date before anything
+     * else, so guarding inside it would let packaging-date OCR silently beat a user's correction.
+     */
+    USER,
 }
 
 data class ExpiryEstimate(

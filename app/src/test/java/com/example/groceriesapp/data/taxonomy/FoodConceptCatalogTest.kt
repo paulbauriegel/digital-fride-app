@@ -1,6 +1,7 @@
 package com.example.groceriesapp.data.taxonomy
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -282,6 +283,17 @@ class FoodConceptCatalogTest {
     }
 
     /**
+     * Reported 2026-08-09: "Esquisa Meerret." (Exquisa horseradish cream cheese, OCR-misread
+     * brand name) and "Bio Suesser-Butt." (sweet cream butter, truncated before "butter" itself
+     * appears) both matched nothing.
+     */
+    @Test
+    fun brandedCreamCheeseAndTruncatedButterResolveCorrectly() {
+        assertEquals("CHEESE_FRESH", FoodConceptCatalog.match("Esquisa Meerret.")?.id)
+        assertEquals("BUTTER", FoodConceptCatalog.match("Bio Suesser-Butt.")?.id)
+    }
+
+    /**
      * Reported 2026-08-09 from real inventory: a frozen prepared dish, a branded soft drink and a
      * branded tea all matched nothing (→ OTHER), and a potted living herb plant was classified the
      * same as cut herbs even though it keeps for weeks rather than days.
@@ -360,5 +372,33 @@ class FoodConceptCatalogTest {
         assertEquals("SAUSAGE", FoodConceptCatalog.match("Bratwurst")?.id)
         // A generic tenderloin cut, with no "HA-" prefix, must not default to chicken.
         assertNull(FoodConceptCatalog.match("Innenfilet"))
+    }
+
+    /**
+     * Reported 2026-08-18 from real receipt rows whose flavour, grade or brand word beat the noun
+     * that says what the product is: a yogurt drink read as fresh mango, a tin of paprika powder
+     * as a bell pepper, ground nutmeg as a bag of nuts, and a cream cheese as nothing at all.
+     */
+    @Test
+    fun flavourAndGradeWordsDoNotBeatTheProductNoun() {
+        val samples = mapOf(
+            "MANGO AYRAN" to "YOGURT",
+            "Ayran" to "YOGURT",
+            "PAPRIKA EDELSUES" to "SPICE_MIX",
+            "Paprika edelsüß" to "SPICE_MIX",
+            "MuSKATNUSS GEM." to "SPICE_MIX",
+            // Miree is a cream-cheese brand; the flavour half of the name is a product of its own.
+            "Miree Meerrett." to "CHEESE_FRESH",
+            "Miree Meerrettich" to "CHEESE_FRESH",
+        )
+        samples.forEach { (name, expectedId) ->
+            assertEquals("\"$name\"", expectedId, FoodConceptCatalog.match(name)?.id)
+        }
+        // The plain vegetable and the plain nut keep their own concepts.
+        assertEquals("BELL_PEPPER", FoodConceptCatalog.match("Paprika rot")?.id)
+        assertEquals("NUTS", FoodConceptCatalog.match("Walnusskerne")?.id)
+        // Horseradish on its own is not a cream cheese — only the brand was taught. (It lands on
+        // RADISH, via that concept's "rettich" keyword, which is a separate pre-existing gap.)
+        assertNotEquals("CHEESE_FRESH", FoodConceptCatalog.match("Meerrettich")?.id)
     }
 }

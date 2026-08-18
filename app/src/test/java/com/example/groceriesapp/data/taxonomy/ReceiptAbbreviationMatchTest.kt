@@ -52,6 +52,24 @@ class ReceiptAbbreviationMatchTest {
     }
 
     @Test
+    fun truncatedPinkGrapefruitJuiceResolvesToJuiceNotTheFruit() {
+        assertMatches("REWE PINK GRAPEF", "JUICE")
+        assertMatches("Grapefruitsaft", "JUICE")
+        // The plain fruit must not be dragged along by the juice keywords.
+        assertMatches("Grapefruit", "GRAPEFRUIT")
+    }
+
+    @Test
+    fun toffifeeResolvesToSweets() {
+        assertMatches("TOFFIFEE 15ER", "CANDY")
+    }
+
+    @Test
+    fun spanishRedWineResolvesToWine() {
+        assertMatches("MEDERANO TINTO", "WINE")
+    }
+
+    @Test
     fun greekTzatzikiResolvesToItsOwnConcept() {
         assertMatches("Griech-Zaziki", "TZATZIKI")
         assertMatches("Tzatziki", "TZATZIKI")

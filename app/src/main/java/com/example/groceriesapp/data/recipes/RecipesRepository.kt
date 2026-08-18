@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.os.Build
+import android.util.Base64
 import com.example.groceriesapp.data.InventoryItem
 import com.example.groceriesapp.data.OpenAiKeyStore
 import com.example.groceriesapp.data.network.OpenAiChatClient
@@ -13,6 +14,7 @@ import com.example.groceriesapp.vision.ocr.awaitTerminalResult
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
 import java.io.OutputStreamWriter
@@ -91,9 +93,9 @@ class RecipesRepository(context: Context) {
     private val importDraftState = MutableStateFlow<Recipe?>(null)
     val importDraft: StateFlow<Recipe?> = importDraftState.asStateFlow()
 
-    /** Set when an adaptation lands so the UI can open the new recipe once. */
-    private val lastAdaptedIdState = MutableStateFlow<String?>(null)
-    val lastAdaptedRecipeId: StateFlow<String?> = lastAdaptedIdState.asStateFlow()
+    /** Set when an adaptation or a requested recipe lands, so the UI can open it once. */
+    private val lastAiRecipeIdState = MutableStateFlow<String?>(null)
+    val lastAiRecipeId: StateFlow<String?> = lastAiRecipeIdState.asStateFlow()
 
     /** Bumped whenever a recipe image file changes, so image composables reload. */
     private val imageVersionState = MutableStateFlow(0)
@@ -110,8 +112,8 @@ class RecipesRepository(context: Context) {
         importDraftState.value = null
     }
 
-    fun clearLastAdaptedRecipeId() {
-        lastAdaptedIdState.value = null
+    fun clearLastAiRecipeId() {
+        lastAiRecipeIdState.value = null
     }
 
     /** Asks for [OpenAiRecipePrompts.SUGGESTION_COUNT] fresh ideas from the current inventory. */
@@ -137,6 +139,42 @@ class RecipesRepository(context: Context) {
         }
     }
 
+    /**
+     * One recipe from a free-text request, a photo, or both — the add menu's "Generate with AI".
+     * The photo rides along as a vision input, so this needs a vision-capable text model.
+     */
+    fun generateRecipeFromRequest(
+        request: String,
+        photo: Bitmap?,
+        inventory: List<InventoryItem>,
+    ) {
+        runAiRequest { apiKey ->
+            val content = chatClient.completeStructured(
+                apiKey = apiKey,
+                model = keyStore.textModel(),
+                systemPrompt = OpenAiRecipePrompts.suggestSystemPrompt(),
+                userContent = OpenAiRecipePrompts.requestUserContent(
+                    request = request,
+                    inventoryPrompt = OpenAiRecipePrompts.inventorySnapshot(
+                        inventory,
+                        LocalDate.now(),
+                    ),
+                    hasPhoto = photo != null,
+                ),
+                schemaName = "recipe_request",
+                schema = OpenAiRecipePrompts.buildSchema(),
+                imageDataUrls = listOfNotNull(photo?.let(::toJpegDataUrl)),
+            )
+            val recipe = OpenAiRecipePrompts.parseRecipes(
+                content = content,
+                source = RecipeSource.AI,
+                createdAtEpochMillis = System.currentTimeMillis(),
+            ).firstOrNull() ?: error("The AI answer contained no usable recipe.")
+            appendGeneratedRecipes(listOf(recipe))
+            lastAiRecipeIdState.value = recipe.id
+        }
+    }
+
     /** Rewrites [recipe] around the current inventory; the result lands as a new AI recipe. */
     fun adaptRecipe(recipe: Recipe, inventory: List<InventoryItem>) {
         runAiRequest { apiKey ->
@@ -157,7 +195,7 @@ class RecipesRepository(context: Context) {
                 createdAtEpochMillis = System.currentTimeMillis(),
             ).firstOrNull() ?: error("The AI answer contained no usable recipe.")
             appendGeneratedRecipes(listOf(adapted))
-            lastAdaptedIdState.value = adapted.id
+            lastAiRecipeIdState.value = adapted.id
         }
     }
 
@@ -343,13 +381,28 @@ class RecipesRepository(context: Context) {
         }
     }
 
-    fun deleteUserRecipe(id: String) {
+    /**
+     * Removes a user-written or AI-generated recipe, its stored photo and its favourite flag.
+     * Curated recipes come from the asset catalogue and are reloaded on every start, so they are
+     * not deletable — callers should not offer the action for them.
+     */
+    fun deleteRecipe(id: String) {
         synchronized(lock) {
-            val current = userRecipesState.value
-            val remaining = current.filterNot { it.id == id }
-            if (remaining.size == current.size) return
-            userRecipesState.value = remaining
-            persistRecipes(userFile, remaining)
+            val users = userRecipesState.value
+            val remainingUsers = users.filterNot { it.id == id }
+            val generated = generatedRecipesState.value
+            val remainingGenerated = generated.filterNot { it.id == id }
+            if (remainingUsers.size == users.size && remainingGenerated.size == generated.size) {
+                return
+            }
+            if (remainingUsers.size != users.size) {
+                userRecipesState.value = remainingUsers
+                persistRecipes(userFile, remainingUsers)
+            }
+            if (remainingGenerated.size != generated.size) {
+                generatedRecipesState.value = remainingGenerated
+                persistRecipes(generatedFile, remainingGenerated)
+            }
             if (id in favoriteIdsState.value) toggleFavoriteLocked(id)
             imageFileFor(id).delete()
         }
@@ -454,18 +507,34 @@ class RecipesRepository(context: Context) {
         }
     }
 
-    private fun writeDownscaledWebp(bitmap: Bitmap, target: File) {
-        val scale = MAX_IMAGE_DIMENSION.toDouble() / maxOf(bitmap.width, bitmap.height)
-        val scaled = if (scale < 1.0) {
-            Bitmap.createScaledBitmap(
-                bitmap,
-                (bitmap.width * scale).toInt().coerceAtLeast(1),
-                (bitmap.height * scale).toInt().coerceAtLeast(1),
-                true,
-            )
-        } else {
-            bitmap
+    /**
+     * A base64 JPEG `data:` URL for a vision request, downscaled like a stored photo — the model
+     * gains nothing from full sensor resolution and the whole thing travels inside the JSON body.
+     */
+    private fun toJpegDataUrl(bitmap: Bitmap): String {
+        val scaled = downscaledToMaxDimension(bitmap)
+        val bytes = ByteArrayOutputStream().use { stream ->
+            scaled.compress(Bitmap.CompressFormat.JPEG, IMAGE_QUALITY, stream)
+            stream.toByteArray()
         }
+        if (scaled !== bitmap) scaled.recycle()
+        return "data:image/jpeg;base64," + Base64.encodeToString(bytes, Base64.NO_WRAP)
+    }
+
+    /** Returns [bitmap] itself when it is already small enough, so callers must check identity. */
+    private fun downscaledToMaxDimension(bitmap: Bitmap): Bitmap {
+        val scale = MAX_IMAGE_DIMENSION.toDouble() / maxOf(bitmap.width, bitmap.height)
+        if (scale >= 1.0) return bitmap
+        return Bitmap.createScaledBitmap(
+            bitmap,
+            (bitmap.width * scale).toInt().coerceAtLeast(1),
+            (bitmap.height * scale).toInt().coerceAtLeast(1),
+            true,
+        )
+    }
+
+    private fun writeDownscaledWebp(bitmap: Bitmap, target: File) {
+        val scaled = downscaledToMaxDimension(bitmap)
         val format = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             Bitmap.CompressFormat.WEBP_LOSSY
         } else {

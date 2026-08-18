@@ -110,4 +110,35 @@ class GroceriesRepositoryConceptCorrectionTest {
         // And it stays corrected through the next launch's re-match-by-name pass.
         assertEquals("CANDY", repository().inventory.value.single().foodConceptId)
     }
+
+    /**
+     * Renaming is how the user says what a mis-read row actually is, so a new name the catalogue
+     * recognises re-classifies the row — icon, category and shelf life follow the new concept.
+     */
+    @Test
+    fun renamingOntoARecognisedNameReclassifiesTheRow() {
+        val repository = repository()
+        val item = repository.addInventoryItem(InventoryItem(id = "i1", name = "MANGO AYRAN"))
+        assertEquals("YOGURT", item.foodConceptId)
+
+        val renamed = repository.renameInventoryItem("i1", "Mango")
+
+        assertEquals("MANGO", renamed?.foodConceptId)
+        assertEquals(GroceryCategory.FRUIT.name, renamed?.category)
+        // And the old classification was not taught as a correction for the new name.
+        assertEquals("MANGO", repository().inventory.value.single().foodConceptId)
+    }
+
+    /** A cosmetic rename onto a name the catalogue knows nothing about keeps the row's concept. */
+    @Test
+    fun renamingOntoAnUnrecognisedNameKeepsTheClassification() {
+        val repository = repository()
+        repository.addInventoryItem(InventoryItem(id = "i1", name = "MANGO AYRAN"))
+
+        val renamed = repository.renameInventoryItem("i1", "Turkish drink")
+
+        assertEquals("YOGURT", renamed?.foodConceptId)
+        // Taught by name, so it survives the next launch's re-match pass and applies to siblings.
+        assertEquals("YOGURT", repository().inventory.value.single().foodConceptId)
+    }
 }

@@ -1,6 +1,5 @@
 package com.example.groceriesapp.data.recipes
 
-import com.example.groceriesapp.data.FillLevel
 import com.example.groceriesapp.data.InventoryItem
 import java.time.LocalDate
 import java.time.ZoneId
@@ -17,14 +16,14 @@ class CookPlannerTest {
         conceptId: String,
         quantity: Double = 1.0,
         unit: String? = null,
-        fillLevel: FillLevel? = null,
+        packageSize: Double? = null,
         id: String,
     ): InventoryItem = InventoryItem(
         name = conceptId,
         foodConceptId = conceptId,
         quantity = quantity,
         unit = unit,
-        fillLevel = fillLevel?.name,
+        packageSize = packageSize,
         id = id,
     )
 
@@ -78,33 +77,44 @@ class CookPlannerTest {
     }
 
     @Test
-    fun `presence-only ingredient steps the fill level down`() {
+    fun `presence-only ingredient halves what is left`() {
         val plan = planFor(
             listOf(RecipeIngredient("OIL", "Olive oil", 2.0, "tbsp")),
-            listOf(item("OIL", quantity = 1.0, fillLevel = FillLevel.FULL, id = "oil1")),
+            listOf(item("OIL", quantity = 1.0, packageSize = 1.0, id = "oil1")),
         )
 
-        assertEquals(listOf<CookConsumption>(CookConsumption.StepFillLevel("oil1", FillLevel.HALF)), plan)
+        assertEquals(listOf<CookConsumption>(CookConsumption.UseSome("oil1", 0.5, 1.0)), plan)
     }
 
     @Test
-    fun `untracked fill level defaults to half`() {
+    fun `an untracked row starts tracking at half of what was bought`() {
         val plan = planFor(
             listOf(RecipeIngredient("SOY_SAUCE", "Soy sauce", 3.0, "tbsp")),
             listOf(item("SOY_SAUCE", quantity = 1.0, id = "soy1")),
         )
 
-        assertEquals(listOf<CookConsumption>(CookConsumption.StepFillLevel("soy1", FillLevel.HALF)), plan)
+        assertEquals(listOf<CookConsumption>(CookConsumption.UseSome("soy1", 0.5, 1.0)), plan)
     }
 
     @Test
-    fun `low fill level item gets removed entirely`() {
+    fun `a quarter-full item gets removed entirely rather than stepping again`() {
+        // The old coarse ladder ended at LOW -> removal; a quarter of a pack is the last rung.
         val plan = planFor(
             listOf(RecipeIngredient("BUTTER", "Butter", 1.0, "tbsp")),
-            listOf(item("BUTTER", quantity = 1.0, fillLevel = FillLevel.LOW, id = "butter1")),
+            listOf(item("BUTTER", quantity = 0.25, packageSize = 1.0, id = "butter1")),
         )
 
         assertEquals(listOf<CookConsumption>(CookConsumption.RemoveAll("butter1")), plan)
+    }
+
+    @Test
+    fun `the halving ladder reproduces the coarse buckets it replaced`() {
+        fun step(quantity: Double) =
+            CookPlanner.stepDown(item("OIL", quantity = quantity, packageSize = 1.0, id = "oil"))
+
+        assertEquals(CookConsumption.UseSome("oil", 0.5, 1.0), step(1.0))
+        assertEquals(CookConsumption.UseSome("oil", 0.25, 1.0), step(0.5))
+        assertEquals(CookConsumption.RemoveAll("oil"), step(0.25))
     }
 
     @Test
@@ -141,16 +151,16 @@ class CookPlannerTest {
     }
 
     @Test
-    fun `applyConsumption maps fill level steps and normalizes EMPTY to removal`() {
+    fun `applyConsumption maps amount steps and normalizes a residue to removal`() {
         val item = item("OIL", quantity = 1.0, id = "oil")
 
         assertEquals(
-            CookOutcome.SetFillLevel(FillLevel.LOW),
-            CookPlanner.applyConsumption(item, CookConsumption.StepFillLevel("oil", FillLevel.LOW)),
+            CookOutcome.SetAmount(0.25, 1.0),
+            CookPlanner.applyConsumption(item, CookConsumption.UseSome("oil", 0.25, 1.0)),
         )
         assertEquals(
             CookOutcome.Remove,
-            CookPlanner.applyConsumption(item, CookConsumption.StepFillLevel("oil", FillLevel.EMPTY)),
+            CookPlanner.applyConsumption(item, CookConsumption.UseSome("oil", 0.05, 1.0)),
         )
         assertEquals(
             CookOutcome.Remove,
@@ -159,12 +169,12 @@ class CookPlannerTest {
     }
 
     @Test
-    fun `incomparable unit on the matched row falls back to a fill level step`() {
+    fun `incomparable unit on the matched row falls back to an amount step`() {
         val plan = planFor(
             listOf(RecipeIngredient("CREAM", "Cream", 200.0, "ml")),
             listOf(item("CREAM", quantity = 1.0, unit = "Becher", id = "cream1")),
         )
 
-        assertTrue(plan.single() is CookConsumption.StepFillLevel)
+        assertTrue(plan.single() is CookConsumption.UseSome)
     }
 }

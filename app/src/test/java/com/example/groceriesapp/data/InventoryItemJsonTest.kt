@@ -20,7 +20,7 @@ class InventoryItemJsonTest {
             storageLocation = StorageLocation.FRIDGE.name,
             locationSource = LocationSource.USER.name,
             locationChangedAtEpochMillis = 1_700_000_000_000L,
-            fillLevel = FillLevel.HALF.name,
+            packageSize = 2.0,
             purchasedAtEpochMillis = 1_699_999_000_000L,
             expiresAtEpochMillis = 1_700_500_000_000L,
             expiryRangeEndEpochMillis = 1_700_600_000_000L,
@@ -28,6 +28,7 @@ class InventoryItemJsonTest {
             openedAtEpochMillis = 1_700_100_000_000L,
             receiptId = "receipt-1",
             receiptItemId = "item-1",
+            barcode = "4008400202020",
         )
 
         val restored = item.toJson().toInventoryItem()
@@ -50,7 +51,8 @@ class InventoryItemJsonTest {
         assertNull(restored.storageLocation)
         assertNull(restored.locationSource)
         assertNull(restored.locationChangedAtEpochMillis)
-        assertNull(restored.fillLevel)
+        assertNull(restored.packageSize)
+        assertNull(restored.barcode)
         assertEquals("Greek Yogurt", restored.name)
     }
 
@@ -59,6 +61,6 @@ class InventoryItemJsonTest {
         val item = InventoryItem(name = "Brot")
         val restored = item.toJson().toInventoryItem()
         assertNull(restored.storageLocation)
-        assertNull(restored.fillLevel)
+        assertNull(restored.packageSize)
     }
 }

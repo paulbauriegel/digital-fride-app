@@ -11,7 +11,9 @@ import com.tom_roush.pdfbox.text.TextPosition
  *
  * [ReweReceiptParser] distinguishes item lines from their quantity/discount continuation lines by
  * indentation, which PDFBox's plain text output discards. So leading whitespace is reconstructed
- * from each line's glyph position relative to the receipt's left margin.
+ * from each line's glyph position relative to the receipt's left margin. Some eBons indent with
+ * literal space glyphs whose first glyph sits at the left margin, so the position of the first
+ * non-blank glyph is what identifies a continuation line.
  */
 class ReweReceiptPdfExtractor(context: Context) {
 
@@ -24,7 +26,7 @@ class ReweReceiptPdfExtractor(context: Context) {
         PDDocument.load(pdfBytes).use { document ->
             val stripper = object : PDFTextStripper() {
                 override fun writeString(text: String, textPositions: List<TextPosition>) {
-                    val startX = textPositions.firstOrNull()?.xDirAdj
+                    val startX = textPositions.firstOrNull { it.unicode.isNotBlank() }?.xDirAdj
                     if (text.isNotBlank() && startX != null) {
                         lines += PositionedLine(text.trim(), startX)
                     } else {
@@ -36,22 +38,25 @@ class ReweReceiptPdfExtractor(context: Context) {
             stripper.sortByPosition = true
             stripper.getText(document)
         }
-
-        val leftMargin = lines.mapNotNull(PositionedLine::startX).minOrNull() ?: 0f
-        return lines.joinToString("\n") { line ->
-            when {
-                line.text.isEmpty() -> ""
-                line.startX != null && line.startX - leftMargin > INDENT_TOLERANCE_POINTS ->
-                    " ${line.text}"
-                else -> line.text
-            }
-        }
+        return reconstructIndentation(lines)
     }
 
-    private data class PositionedLine(val text: String, val startX: Float?)
+    internal data class PositionedLine(val text: String, val startX: Float?)
 
-    private companion object {
+    internal companion object {
         /** Roughly one monospace character; centred header lines sit far beyond this. */
         const val INDENT_TOLERANCE_POINTS = 3f
+
+        internal fun reconstructIndentation(lines: List<PositionedLine>): String {
+            val leftMargin = lines.mapNotNull(PositionedLine::startX).minOrNull() ?: 0f
+            return lines.joinToString("\n") { line ->
+                when {
+                    line.text.isEmpty() -> ""
+                    line.startX != null && line.startX - leftMargin > INDENT_TOLERANCE_POINTS ->
+                        " ${line.text}"
+                    else -> line.text
+                }
+            }
+        }
     }
 }

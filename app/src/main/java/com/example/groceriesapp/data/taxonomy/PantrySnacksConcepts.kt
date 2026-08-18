@@ -84,8 +84,11 @@ internal val pantrySnacksConcepts: List<FoodConcept> = listOf(
         category = GroceryCategory.SNACKS_SWEETS,
         displayName = "Sweets",
         iconRes = R.drawable.ic_food_candy,
-        // "fruchtbumi" is an OCR misread of "Fruchtgummi" (g misread as b).
-        keywords = listOf("bonbon", "gummibär", "fruchtgummi", "fruchtbumi", "lakritz", "phantasia"),
+        // "fruchtbumi" is an OCR misread of "Fruchtgummi" (g misread as b). "toffifee" is a brand
+        // whose name says nothing about what it is.
+        keywords = listOf(
+            "bonbon", "gummibär", "fruchtgummi", "fruchtbumi", "lakritz", "phantasia", "toffifee",
+        ),
     ),
     FoodConcept(
         id = "CHIPS",
@@ -276,7 +279,7 @@ internal val pantrySnacksConcepts: List<FoodConcept> = listOf(
         id = "PEPPER_SPICE",
         category = GroceryCategory.SPICES_BAKING,
         displayName = "Pepper",
-        iconRes = R.drawable.ic_food_pepper_spice,
+        iconRes = R.drawable.ic_food_spice_mix,
         keywords = listOf("pfeffer"),
     ),
     FoodConcept(
@@ -284,7 +287,18 @@ internal val pantrySnacksConcepts: List<FoodConcept> = listOf(
         category = GroceryCategory.SPICES_BAKING,
         displayName = "Spices",
         iconRes = R.drawable.ic_food_spice_mix,
-        keywords = listOf("gewürz", "paprikapulver", "curry", "oregano", "thymian", "zimt"),
+        keywords = listOf(
+            "gewürz", "paprikapulver", "curry", "oregano", "thymian", "zimt",
+            // Ground nutmeg. "muskat" alone is left out: it would swallow Muskateller wine.
+            "muskatnuss", "muskatnuß",
+            // The grade word on a paprika tin ("PAPRIKA EDELSUES"); "edelsues" is the umlaut-less
+            // receipt spelling. Matching is a plain lowercase substring test with no umlaut
+            // folding, so every spelling has to be listed.
+            "edelsüß", "edelsüss", "edelsues",
+        ),
+        // The grade words outrank the fresh vegetable: BELL_PEPPER's "paprika" is contained in
+        // the same string and would otherwise win or tie on length.
+        priorityKeywords = listOf("edelsüß", "edelsüss", "edelsues"),
     ),
     FoodConcept(
         id = "SUGAR",

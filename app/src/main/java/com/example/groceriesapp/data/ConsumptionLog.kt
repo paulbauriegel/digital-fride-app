@@ -25,7 +25,8 @@ data class ConsumptionEvent(
     val quantity: Double = 1.0,
     val unit: String? = null,
     val priceCents: Int? = null,
-    val fillLevel: String? = null,
+    /** The pack size [quantity] was measured against, when the item was tracking one. */
+    val packageSize: Double? = null,
     val reason: ConsumptionReason,
     /** Set for [ConsumptionReason.COOKED]: which recipe consumed the item. Additive fields —
      * older builds' loaders skip unknown reasons/keys, so no schema version bump. */
@@ -51,7 +52,7 @@ internal fun ConsumptionEvent.toJson(): JSONObject = JSONObject()
     .put("quantity", quantity)
     .put("unit", unit ?: JSONObject.NULL)
     .put("priceCents", priceCents ?: JSONObject.NULL)
-    .put("fillLevel", fillLevel ?: JSONObject.NULL)
+    .put("packageSize", packageSize ?: JSONObject.NULL)
     .put("reason", reason.name)
     .put("recipeId", recipeId ?: JSONObject.NULL)
     .put("recipeTitle", recipeTitle ?: JSONObject.NULL)
@@ -70,7 +71,7 @@ internal fun JSONObject.toConsumptionEventOrNull(): ConsumptionEvent? = runCatch
         quantity = optDouble("quantity", 1.0),
         unit = optStringOrNull("unit"),
         priceCents = if (isNull("priceCents")) null else optInt("priceCents"),
-        fillLevel = optStringOrNull("fillLevel"),
+        packageSize = if (isNull("packageSize")) null else optDouble("packageSize").takeIf { it > 0.0 },
         reason = ConsumptionReason.entries.first { it.name == getString("reason") },
         recipeId = optStringOrNull("recipeId"),
         recipeTitle = optStringOrNull("recipeTitle"),

@@ -1,6 +1,7 @@
 package com.example.groceriesapp.feature.biocompany
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -17,6 +18,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.NotInterested
 import androidx.compose.material.icons.filled.Receipt
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -28,6 +30,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -37,9 +40,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.groceriesapp.data.BioCompanyRepository
 import com.example.groceriesapp.data.GroceriesRepository
 import com.example.groceriesapp.data.toReceiptItems
-import com.example.groceriesapp.data.network.BioCompanyReceiptDetail
 import com.example.groceriesapp.data.network.BioCompanyReceiptEntry
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.ui.semantics.Role
@@ -55,13 +59,22 @@ fun BioCompanyReceiptsScreen(
     entries: List<BioCompanyReceiptEntry>,
     onBack: () -> Unit,
     groceryRepository: GroceriesRepository,
-    fetchDetail: suspend (BioCompanyReceiptEntry) -> Result<BioCompanyReceiptDetail>,
+    bioCompanyRepository: BioCompanyRepository,
     modifier: Modifier = Modifier,
 ) {
     var selected by remember { mutableStateOf(setOf<BioCompanyReceiptEntry>()) }
     var isImporting by remember { mutableStateOf(false) }
     var importResult by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
+    val syncState by bioCompanyRepository.syncState.collectAsStateWithLifecycle()
+
+    // The receipt list lives only in memory, so opening this screen always refreshes it —
+    // "import" should never require a manual pull in Settings first.
+    LaunchedEffect(Unit) {
+        if (bioCompanyRepository.syncState.value !is BioCompanyRepository.SyncState.FETCHING) {
+            bioCompanyRepository.fetchReceipts()
+        }
+    }
 
     Scaffold(
         modifier = modifier,
@@ -78,7 +91,7 @@ fun BioCompanyReceiptsScreen(
     ) { innerPadding ->
         Column(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
             if (entries.isEmpty()) {
-                androidx.compose.foundation.layout.Box(
+                Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center,
                 ) {
@@ -86,19 +99,56 @@ fun BioCompanyReceiptsScreen(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.medium),
                     ) {
-                        Icon(
-                            Icons.Default.Receipt,
-                            contentDescription = null,
-                            modifier = Modifier.size(64.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Text("No receipts found", style = MaterialTheme.typography.titleLarge)
-                        Text(
-                            "Pull receipts first from Settings, or your BIO COMPANY account has no receipts.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            textAlign = TextAlign.Center,
-                        )
+                        when (val state = syncState) {
+                            is BioCompanyRepository.SyncState.FETCHING -> {
+                                CircularProgressIndicator()
+                                Text(
+                                    "Loading receipts…",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            is BioCompanyRepository.SyncState.ERROR -> {
+                                Icon(
+                                    Icons.Default.Receipt,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(64.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                Text(
+                                    "Couldn't load receipts",
+                                    style = MaterialTheme.typography.titleLarge,
+                                )
+                                Text(
+                                    state.message,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.error,
+                                    textAlign = TextAlign.Center,
+                                )
+                                Button(
+                                    onClick = {
+                                        scope.launch { bioCompanyRepository.fetchReceipts() }
+                                    },
+                                ) {
+                                    Text("Retry")
+                                }
+                            }
+                            else -> {
+                                Icon(
+                                    Icons.Default.Receipt,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(64.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                Text("No receipts found", style = MaterialTheme.typography.titleLarge)
+                                Text(
+                                    "Your BIO COMPANY account has no receipts yet.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = TextAlign.Center,
+                                )
+                            }
+                        }
                     }
                 }
             } else {
@@ -161,7 +211,7 @@ fun BioCompanyReceiptsScreen(
                                             imported.add(entry.receiptnumber)
                                             continue
                                         }
-                                        val detail = fetchDetail(entry)
+                                        val detail = bioCompanyRepository.fetchReceiptDetail(entry)
                                         if (detail.isSuccess) {
                                             val d = detail.getOrNull() ?: continue
                                             val items = d.items.toReceiptItems()

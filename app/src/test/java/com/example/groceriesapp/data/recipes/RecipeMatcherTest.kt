@@ -1,6 +1,5 @@
 package com.example.groceriesapp.data.recipes
 
-import com.example.groceriesapp.data.FillLevel
 import com.example.groceriesapp.data.InventoryItem
 import java.time.LocalDate
 import java.time.ZoneId
@@ -22,7 +21,7 @@ class RecipeMatcherTest {
         quantity: Double = 1.0,
         unit: String? = null,
         expiresInDays: Long? = null,
-        fillLevel: FillLevel? = null,
+        packageSize: Double? = null,
         name: String = conceptId ?: "item",
     ): InventoryItem = InventoryItem(
         name = name,
@@ -30,7 +29,7 @@ class RecipeMatcherTest {
         quantity = quantity,
         unit = unit,
         expiresAtEpochMillis = expiresInDays?.let(::expiresInDays),
-        fillLevel = fillLevel?.name,
+        packageSize = packageSize,
     )
 
     private fun recipe(
@@ -131,10 +130,11 @@ class RecipeMatcherTest {
     }
 
     @Test
-    fun `empty fill level items are excluded from matching`() {
+    fun `items tracked down to a residue are excluded from matching`() {
         val match = matcher.matchOne(
             recipe(ingredients = listOf(RecipeIngredient("BUTTER", "Butter", 20.0, "g"))),
-            listOf(item("BUTTER", 250.0, "g", fillLevel = FillLevel.EMPTY)),
+            // 5 g left of a 250 g pack — present, but not something to plan a meal around.
+            listOf(item("BUTTER", 5.0, "g", packageSize = 250.0)),
             today,
         )
 

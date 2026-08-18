@@ -8,6 +8,7 @@ import com.example.groceriesapp.data.recipes.CookConsumption
 import com.example.groceriesapp.data.recipes.CookOutcome
 import com.example.groceriesapp.data.recipes.CookPlanner
 import com.example.groceriesapp.data.taxonomy.ExpiryEstimator
+import com.example.groceriesapp.data.taxonomy.ExpirySource
 import com.example.groceriesapp.data.taxonomy.FoodConcept
 import com.example.groceriesapp.data.taxonomy.FoodConceptCatalog
 import com.example.groceriesapp.data.taxonomy.FoodConceptCorrections
@@ -313,19 +314,27 @@ class GroceriesRepository(
 
     private fun normalizeInventoryItem(item: InventoryItem): InventoryItem {
         val concept = resolveConcept(item.name, item.foodConceptId)
-        val category = concept?.category
-            ?: GroceryCategory.fromStorageValue(item.category, item.name)
+        // The concept is resolved either way — it drives the icon and the shelf-life rule. A
+        // user-picked category just stops the coarse bucket tracking it, the same way
+        // LocationSource.USER stops the location tracking the suggester.
+        val category = if (item.categorySource == CategorySource.USER.name) {
+            GroceryCategory.fromStorageValue(item.category, item.name)
+        } else {
+            concept?.category ?: GroceryCategory.fromStorageValue(item.category, item.name)
+        }
         val normalized = item.copy(category = category.name, foodConceptId = concept?.id)
             .withSuggestedLocationUnlessUserSet(category, concept?.id)
-        // Always recompute rather than only filling in a missing/stale-classification estimate:
-        // nothing here is ever user-authored (there's no UI to hand-set an expiry date yet), so a
-        // fresh estimate can never clobber something the user typed. This also self-heals items
-        // whose stored estimate predates a shelf-life data fix, not just a classification fix —
-        // e.g. a concept gaining a proper rule where it used to fall back to its category. Once
-        // printed-date OCR lands, this stays safe: ExpiryEstimator checks printedDateEpochMillis
-        // first regardless, so a real printed date still wins over the algorithmic guess. The
-        // storage location is user-authored state, but the estimator receives it as an input, so
-        // the recompute respects it rather than overwriting it.
+        // Recompute on every pass so items self-heal when the data behind the estimate improves —
+        // not just a classification fix, but a shelf-life data fix too, e.g. a concept gaining a
+        // proper rule where it used to fall back to its category.
+        //
+        // This runs on every construction, so it is the pass that would silently erase hand-set
+        // expiry dates. It doesn't, because withEstimatedExpiry returns USER-sourced items
+        // untouched — the same contract LocationSource.USER has for storage locations, which is
+        // why the location below is an input to the estimate rather than something it overwrites.
+        // Once printed-date OCR lands, this stays safe from the other direction as well:
+        // ExpiryEstimator checks printedDateEpochMillis first, so a real printed date still wins
+        // over the algorithmic guess.
         return normalized.withEstimatedExpiry(
             purchasedAtEpochMillis = normalized.purchasedAtEpochMillis
                 ?: normalized.addedAtEpochMillis,
@@ -366,7 +375,11 @@ class GroceriesRepository(
                             .takeIf { it.isNotEmpty() }?.sum(),
                         openedAtEpochMillis = group
                             .mapNotNull(InventoryItem::openedAtEpochMillis).minOrNull(),
-                        fillLevel = group.firstNotNullOfOrNull(InventoryItem::fillLevel),
+                        // Summed, not first-non-null: the quantities above are summed, so the
+                        // denominator has to follow or three merged half-full rows would read as
+                        // 150% of one pack.
+                        packageSize = group.mapNotNull(InventoryItem::packageSize)
+                            .takeIf { it.isNotEmpty() }?.sum(),
                         storageLocation = userLocated?.storageLocation ?: item.storageLocation,
                         locationSource = userLocated?.locationSource ?: item.locationSource,
                         locationChangedAtEpochMillis = userLocated?.locationChangedAtEpochMillis
@@ -398,9 +411,33 @@ class GroceriesRepository(
         )
     }
 
+    /** A date the user set by hand is theirs; no estimate ever overwrites it. */
+    /**
+     * The floor a tracked amount is held above. [InventoryItem] requires a positive quantity, and
+     * an item sitting empty in the fridge is still an item — it leaves through removal, which asks
+     * what became of it, not by silently reaching zero.
+     */
+    private val MINIMUM_TRACKED_AMOUNT = 0.001
+
+    private val InventoryItem.hasUserExpiry: Boolean
+        get() = expiryEstimateSource == ExpirySource.USER.name
+
+    /**
+     * Re-anchors the expiry estimate after something that changes it — opening the item, or moving
+     * it to a location with a different storage life. Returns the receiver untouched when the date
+     * is the user's, and keeps the original date when nothing better could be derived.
+     */
+    private fun InventoryItem.reestimatedExpiry(): InventoryItem {
+        if (hasUserExpiry) return this
+        return copy(expiresAtEpochMillis = null, expiryRangeEndEpochMillis = null)
+            .withEstimatedExpiry(purchasedAtEpochMillis ?: addedAtEpochMillis)
+            .let { if (it.expiresAtEpochMillis == null) this else it }
+    }
+
     private fun InventoryItem.withEstimatedExpiry(
         purchasedAtEpochMillis: Long?,
     ): InventoryItem {
+        if (hasUserExpiry) return this
         val estimate = expiryEstimator.estimate(
             foodConceptId = foodConceptId,
             categoryStorageValue = category,
@@ -420,7 +457,7 @@ class GroceriesRepository(
 
     /**
      * Records that an item has been opened and re-estimates its window, since opened storage life
-     * is typically much shorter than unopened.
+     * is typically much shorter than unopened. An expiry date the user set by hand is left alone.
      */
     fun markInventoryItemOpened(id: String): InventoryItem? {
         synchronized(lock) {
@@ -429,11 +466,7 @@ class GroceriesRepository(
             if (existing.openedAtEpochMillis != null) return existing
 
             val opened = existing.copy(openedAtEpochMillis = System.currentTimeMillis())
-            val reestimated = opened
-                .copy(expiresAtEpochMillis = null, expiryRangeEndEpochMillis = null)
-                .withEstimatedExpiry(opened.purchasedAtEpochMillis ?: opened.addedAtEpochMillis)
-                // Keep the original date if nothing better could be derived.
-                .let { if (it.expiresAtEpochMillis == null) opened else it }
+            val reestimated = opened.reestimatedExpiry()
 
             val updated = current.map { if (it.id == id) reestimated else it }
             persistInventory(updated)
@@ -461,7 +494,9 @@ class GroceriesRepository(
 
     /**
      * Moves an item between locations and re-estimates its window from the move date, since the
-     * destination's storage life differs (freezing extends it, thawing shortens it).
+     * destination's storage life differs (freezing extends it, thawing shortens it). An expiry
+     * date the user set by hand survives the move — the screen says so rather than silently
+     * keeping the old date.
      */
     fun setInventoryItemStorageLocation(id: String, location: StorageLocation): InventoryItem? {
         synchronized(lock) {
@@ -474,11 +509,7 @@ class GroceriesRepository(
                 locationSource = LocationSource.USER.name,
                 locationChangedAtEpochMillis = System.currentTimeMillis(),
             )
-            val reestimated = moved
-                .copy(expiresAtEpochMillis = null, expiryRangeEndEpochMillis = null)
-                .withEstimatedExpiry(moved.purchasedAtEpochMillis ?: moved.addedAtEpochMillis)
-                // Keep the original date if nothing better could be derived.
-                .let { if (it.expiresAtEpochMillis == null) moved else it }
+            val reestimated = moved.reestimatedExpiry()
 
             val updated = current.map { if (it.id == id) reestimated else it }
             persistInventory(updated)
@@ -535,19 +566,200 @@ class GroceriesRepository(
         }
     }
 
-    /** Fill level is a display-only hint about the remaining amount; expiry is unaffected. */
-    fun setInventoryItemFillLevel(id: String, fillLevel: FillLevel?): InventoryItem? {
+    /**
+     * Sets how much is left, in the item's own unit. The remaining amount is a display hint about
+     * stock, not about freshness, so expiry is unaffected.
+     *
+     * A value above the pack size raises the pack size to match rather than clamping — a refilled
+     * canister or a topped-up bulk jar genuinely holds more than the bag it came from. Zero is
+     * floored just above it, because an item still physically present must keep a positive
+     * quantity; a genuinely finished item leaves through [removeInventoryItem], which asks whether
+     * it was eaten or binned.
+     */
+    fun setInventoryItemAmount(id: String, quantity: Double): InventoryItem? {
+        require(quantity.isFinite() && quantity >= 0.0) { "Amount must be finite and non-negative." }
         synchronized(lock) {
             val current = _inventory.value
             val existing = current.firstOrNull { it.id == id } ?: return null
-            if (existing.fillLevel == fillLevel?.name) return existing
+            val newQuantity = quantity.coerceAtLeast(MINIMUM_TRACKED_AMOUNT)
+            val newPackageSize = existing.packageSize?.coerceAtLeast(newQuantity)
+            if (newQuantity == existing.quantity && newPackageSize == existing.packageSize) {
+                return existing
+            }
 
-            val changed = existing.copy(fillLevel = fillLevel?.name)
+            val changed = existing.copy(quantity = newQuantity, packageSize = newPackageSize)
             val updated = current.map { if (it.id == id) changed else it }
             persistInventory(updated)
             _inventory.value = updated
             return changed
         }
+    }
+
+    /**
+     * Sets the "of 1 L" the remaining amount is read against, and optionally re-labels the unit
+     * both are expressed in. Null stops tracking the amount altogether — the state a row is in
+     * before the user ever touches it, and the way back out of tracking.
+     *
+     * Changing the unit does not convert the numbers: the caller is telling the app what the
+     * existing figures mean, not asking for a conversion.
+     */
+    fun setInventoryItemPackageSize(
+        id: String,
+        packageSize: Double?,
+        unit: String? = null,
+    ): InventoryItem? {
+        require(packageSize == null || (packageSize.isFinite() && packageSize > 0.0)) {
+            "Package size must be finite and positive when set."
+        }
+        synchronized(lock) {
+            val current = _inventory.value
+            val existing = current.firstOrNull { it.id == id } ?: return null
+            val newUnit = unit?.trim()?.ifBlank { null } ?: existing.unit
+            if (existing.packageSize == packageSize && existing.unit == newUnit) return existing
+
+            val changed = existing.copy(
+                packageSize = packageSize,
+                unit = newUnit,
+                // A shrinking pack can't hold more than it is; a growing one leaves the remainder
+                // where it was rather than silently topping the item up.
+                quantity = packageSize?.let { existing.quantity.coerceAtMost(it) }
+                    ?: existing.quantity,
+            )
+            val updated = current.map { if (it.id == id) changed else it }
+            persistInventory(updated)
+            _inventory.value = updated
+            return changed
+        }
+    }
+
+    /**
+     * Hand-sets the expiry date, stamping [ExpirySource.USER] so nothing estimates over it again —
+     * not the launch normalize pass, not opening the item, not moving it to the freezer.
+     *
+     * Null hands the date back to the estimator and immediately recomputes, so the row shows a
+     * fresh estimate straight away rather than "Expiry unknown" until the next launch.
+     */
+    fun setInventoryItemExpiryDate(id: String, expiresAtEpochMillis: Long?): InventoryItem? {
+        synchronized(lock) {
+            val current = _inventory.value
+            val existing = current.firstOrNull { it.id == id } ?: return null
+
+            val changed = if (expiresAtEpochMillis == null) {
+                existing.copy(
+                    expiresAtEpochMillis = null,
+                    expiryRangeEndEpochMillis = null,
+                    expiryEstimateSource = null,
+                ).withEstimatedExpiry(existing.purchasedAtEpochMillis ?: existing.addedAtEpochMillis)
+            } else {
+                existing.copy(
+                    expiresAtEpochMillis = expiresAtEpochMillis,
+                    // A hand-set date names one day; carrying a range end would render it as a
+                    // window the user never gave.
+                    expiryRangeEndEpochMillis = null,
+                    expiryEstimateSource = ExpirySource.USER.name,
+                )
+            }
+            if (changed == existing) return existing
+
+            val updated = current.map { if (it.id == id) changed else it }
+            persistInventory(updated)
+            _inventory.value = updated
+            return changed
+        }
+    }
+
+    /**
+     * Moves one row into a different coarse category. Unlike [setInventoryItemFoodConcept], which
+     * teaches the app what a product *is* and therefore applies by name everywhere, this is a
+     * per-row filing decision and stays on the row.
+     *
+     * Stamping [CategorySource.USER] is what makes it stick: the launch normalize pass otherwise
+     * re-derives the category from the name-matched concept. Note that filing something under a
+     * category with no shelf life ([GroceryCategory.OTHER], [GroceryCategory.HOUSEHOLD]) also
+     * switches off expiry estimation for that row.
+     */
+    fun setInventoryItemCategory(id: String, category: GroceryCategory): InventoryItem? {
+        synchronized(lock) {
+            val current = _inventory.value
+            val existing = current.firstOrNull { it.id == id } ?: return null
+            if (existing.category == category.name &&
+                existing.categorySource == CategorySource.USER.name
+            ) {
+                return existing
+            }
+
+            val changed = existing.copy(
+                category = category.name,
+                categorySource = CategorySource.USER.name,
+            ).reestimatedExpiry()
+            val updated = current.map { if (it.id == id) changed else it }
+            persistInventory(updated)
+            _inventory.value = updated
+            return changed
+        }
+    }
+
+    /**
+     * Renames one row — the receipt string was unreadable, or the user wants "Oat drink" rather
+     * than "BAR. HAFERDRINK".
+     *
+     * Two things have to be carried across, because both the classifier and the import ledger are
+     * keyed by name rather than by row:
+     *
+     * 1. **Classification.** A rename onto a name the app already understands is taken at face
+     *    value and re-classifies the row — renaming is how the user says "this is not a mango,
+     *    it is an ayran", and the icon, category and shelf life have to follow. Only when the new
+     *    name matches nothing is the current concept re-taught under it, so that a purely
+     *    cosmetic rename ("BAR. HAFERDRINK" → "Oat drink") keeps what the row already knew
+     *    instead of falling back to an unclassified row.
+     * 2. **Import provenance.** [restampImports] falls back to a name key for rows with no
+     *    `receiptItemId` — which includes the extra lines of a merged group, not just manual rows.
+     *    A concrete id is adopted *before* the name changes, so removing the item still marks its
+     *    receipt line used up.
+     *
+     * One consequence is left deliberately unhandled: renaming a row onto another row's name lets
+     * the launch merge pass combine them. That is usually what the user meant, and the amount
+     * merging keeps the result coherent.
+     */
+    fun renameInventoryItem(id: String, name: String): InventoryItem? {
+        val trimmed = name.trim()
+        require(trimmed.isNotBlank()) { "Inventory item name must not be blank." }
+        synchronized(lock) {
+            val current = _inventory.value
+            val existing = current.firstOrNull { it.id == id } ?: return null
+            if (existing.name == trimmed) return existing
+
+            val anchored = existing.copy(
+                receiptItemId = existing.receiptItemId ?: anchorReceiptItemId(existing),
+            )
+            // Pin the current classification under the new name only when the new name is not
+            // itself a statement about what the product is — see the note on classification above.
+            val newNameClassifies = foodConceptCorrections.conceptFor(trimmed) != null ||
+                FoodConceptCatalog.match(trimmed) != null
+            if (!newNameClassifies) {
+                anchored.foodConceptId?.let { conceptId ->
+                    foodConceptCorrections.set(trimmed, conceptId)
+                }
+            }
+
+            val changed = normalizeInventoryItem(anchored.copy(name = trimmed))
+            val updated = current.map { if (it.id == id) changed else it }
+            persistInventory(updated)
+            _inventory.value = updated
+            return changed
+        }
+    }
+
+    /**
+     * The receipt line this row most likely came from, for rows that carry a receipt but no line
+     * id (older imports, and the non-primary members of a merged group). Resolved by the *current*
+     * name, so it must be called before a rename rewrites it.
+     */
+    private fun anchorReceiptItemId(item: InventoryItem): String? {
+        val receiptId = item.receiptId ?: return null
+        val receipt = _receipts.value.firstOrNull { it.id == receiptId } ?: return null
+        val key = mergeKeyOf(item.name, item.unit)
+        return receipt.items.firstOrNull { mergeKeyOf(it.name, it.unit) == key }?.id
     }
 
     fun createScanSession(id: String = UUID.randomUUID().toString()): ScanDraft {
@@ -883,20 +1095,35 @@ class GroceriesRepository(
         }
     }
 
+    /**
+     * The row a re-scan of [barcode] should reuse, or null when this pack is new to the inventory.
+     * The list is newest-first, so a repeat purchase resolves to the most recent one.
+     */
+    fun inventoryItemByBarcode(barcode: String): InventoryItem? =
+        _inventory.value.firstOrNull { it.barcode == barcode }
+
     fun addInventoryItem(item: InventoryItem): InventoryItem {
         synchronized(lock) {
             // The same product bought again the same day stacks onto the existing entry instead
             // of cluttering the list — three yogurts become one row with quantity 3.
             val anchorEpochMillis0 = item.purchasedAtEpochMillis ?: item.addedAtEpochMillis
             val stackTarget = _inventory.value.firstOrNull { existing ->
-                mergeKeyOf(existing.name, existing.unit) == mergeKeyOf(item.name, item.unit) &&
-                    isSameCalendarDay(
-                        existing.purchasedAtEpochMillis ?: existing.addedAtEpochMillis,
-                        anchorEpochMillis0,
-                    )
+                // A scanned barcode identifies the product more reliably than its name does — the
+                // same pack can arrive as "Vollmilch" by hand and "Weihenstephan Frische Vollmilch"
+                // from Open Food Facts.
+                val sameProduct = (item.barcode != null && existing.barcode == item.barcode) ||
+                    mergeKeyOf(existing.name, existing.unit) == mergeKeyOf(item.name, item.unit)
+                sameProduct && isSameCalendarDay(
+                    existing.purchasedAtEpochMillis ?: existing.addedAtEpochMillis,
+                    anchorEpochMillis0,
+                )
             }
             if (stackTarget != null) {
-                val stacked = stackTarget.copy(quantity = stackTarget.quantity + item.quantity)
+                val stacked = stackTarget.copy(
+                    quantity = stackTarget.quantity + item.quantity,
+                    // A row first added by hand learns its barcode the first time it is scanned.
+                    barcode = stackTarget.barcode ?: item.barcode,
+                )
                 val updated = _inventory.value.map { if (it.id == stacked.id) stacked else it }
                 persistInventory(updated)
                 _inventory.value = updated
@@ -951,7 +1178,7 @@ class GroceriesRepository(
                     quantity = existing.quantity,
                     unit = existing.unit,
                     priceCents = existing.priceCents,
-                    fillLevel = existing.fillLevel,
+                    packageSize = existing.packageSize,
                     reason = reason,
                     addedAtEpochMillis = existing.addedAtEpochMillis,
                     expiresAtEpochMillis = existing.expiresAtEpochMillis,
@@ -983,11 +1210,11 @@ class GroceriesRepository(
     }
 
     /**
-     * Applies a cook plan: decrements quantities, steps fill levels, and removes used-up items.
-     * Partial decrements log an event carrying only the consumed amount with no price (the item's
-     * full price is logged when the row finally leaves); removals log a full snapshot. Fill-level
-     * steps log nothing — fill level is a display-only hint, consistent with
-     * [setInventoryItemFillLevel]. Returns the events written.
+     * Applies a cook plan: decrements quantities, steps down remaining amounts, and removes
+     * used-up items. Partial decrements log an event carrying only the consumed amount with no
+     * price (the item's full price is logged when the row finally leaves); removals log a full
+     * snapshot. Amount steps log nothing — the remaining amount is a display hint about stock,
+     * consistent with [setInventoryItemAmount]. Returns the events written.
      */
     fun consumeForRecipe(
         recipeId: String,
@@ -1015,9 +1242,16 @@ class GroceriesRepository(
                             removedAtEpochMillis = now,
                         )
                     }
-                    is CookOutcome.SetFillLevel -> {
+                    is CookOutcome.SetAmount -> {
                         inventory = inventory.map {
-                            if (it.id == existing.id) it.copy(fillLevel = outcome.newLevel.name) else it
+                            if (it.id == existing.id) {
+                                it.copy(
+                                    quantity = outcome.newQuantity,
+                                    packageSize = outcome.packageSize,
+                                )
+                            } else {
+                                it
+                            }
                         }
                     }
                     is CookOutcome.Remove -> {
@@ -1067,7 +1301,7 @@ class GroceriesRepository(
         quantity = quantity,
         unit = item.unit,
         priceCents = priceCents,
-        fillLevel = item.fillLevel,
+        packageSize = item.packageSize,
         reason = ConsumptionReason.COOKED,
         recipeId = recipeId,
         recipeTitle = recipeTitle,
@@ -1556,6 +1790,7 @@ internal fun InventoryItem.toJson(): JSONObject = JSONObject()
     .put("id", id)
     .put("name", name)
     .putNullable("category", category)
+    .putNullable("categorySource", categorySource)
     .putNullable("foodConceptId", foodConceptId)
     .put("quantity", quantity)
     .putNullable("unit", unit)
@@ -1563,7 +1798,7 @@ internal fun InventoryItem.toJson(): JSONObject = JSONObject()
     .putNullable("storageLocation", storageLocation)
     .putNullable("locationSource", locationSource)
     .putNullable("locationChangedAtEpochMillis", locationChangedAtEpochMillis)
-    .putNullable("fillLevel", fillLevel)
+    .putNullable("packageSize", packageSize)
     .putNullable("purchasedAtEpochMillis", purchasedAtEpochMillis)
     .putNullable("expiresAtEpochMillis", expiresAtEpochMillis)
     .putNullable("expiryRangeEndEpochMillis", expiryRangeEndEpochMillis)
@@ -1573,6 +1808,7 @@ internal fun InventoryItem.toJson(): JSONObject = JSONObject()
     .putNullable("printedDateType", printedDateType)
     .putNullable("receiptId", receiptId)
     .putNullable("receiptItemId", receiptItemId)
+    .putNullable("barcode", barcode)
     .put("addedAtEpochMillis", addedAtEpochMillis)
 
 private fun JSONObject.toDigitalReceipt(resolvePath: (String) -> String): DigitalReceipt = DigitalReceipt(
@@ -1692,18 +1928,66 @@ private fun JSONObject.toReceiptItem(): ReceiptItem = ReceiptItem(
     needsReview = optBoolean("needsReview", false),
 )
 
-internal fun JSONObject.toInventoryItem(): InventoryItem = InventoryItem(
+/**
+ * Fractions the four retired coarse fill buckets stood for. They match what the old ring drew, so
+ * an upgrade doesn't visibly move any item's indicator.
+ *
+ * `EMPTY` keeps its 0.05 rather than dropping to zero because [InventoryItem] requires a positive
+ * quantity; "nearly empty" is the honest reading of a bucket that never meant a measured zero.
+ */
+private val LEGACY_FILL_LEVEL_FRACTIONS = mapOf(
+    "FULL" to 1.0,
+    "HALF" to 0.5,
+    "LOW" to 0.25,
+    "EMPTY" to 0.05,
+)
+
+/**
+ * Reads the continuous amount, migrating a pre-[InventoryItem.packageSize] row on the way.
+ *
+ * This lives on the read path rather than in the launch normalize pass because
+ * `moveInventoryItemToHousehold` parses the target household's index directly and never normalizes
+ * — a migration there would skip every item that arrived by a move. It is idempotent: once
+ * `packageSize` is present, the legacy key is ignored, so re-reading a migrated file is a no-op.
+ *
+ * A row with no `fillLevel` at all stays untracked. Back-filling those to "full" would be the more
+ * obvious move and the wrong one: the old UI drew nothing for a null fill level, so it would put a
+ * fill indicator on every row in the list overnight.
+ */
+private fun JSONObject.readAmount(quantity: Double, unit: String?): Pair<Double, Double?> {
+    nullableDouble("packageSize")?.let { return quantity to it }
+    val fraction = nullableString("fillLevel")
+        ?.let(LEGACY_FILL_LEVEL_FRACTIONS::get)
+        ?: return quantity to null
+    // Counts don't scale — halving "3 pc" into 1.5 yogurts would invent a fractional object.
+    if (unit?.trim()?.lowercase() in COUNTABLE_UNITS) return quantity to quantity
+    return quantity * fraction to quantity
+}
+
+internal fun JSONObject.toInventoryItem(): InventoryItem {
+    val storedQuantity = optDouble("quantity", 1.0)
+    val storedUnit = nullableString("unit")
+    val (quantity, packageSize) = readAmount(storedQuantity, storedUnit)
+    return toInventoryItem(quantity, packageSize, storedUnit)
+}
+
+private fun JSONObject.toInventoryItem(
+    quantity: Double,
+    packageSize: Double?,
+    unit: String?,
+): InventoryItem = InventoryItem(
     id = getString("id"),
     name = getString("name"),
     category = nullableString("category"),
+    categorySource = nullableString("categorySource"),
     foodConceptId = nullableString("foodConceptId"),
-    quantity = optDouble("quantity", 1.0),
-    unit = nullableString("unit"),
+    quantity = quantity,
+    unit = unit,
     priceCents = nullableInt("priceCents"),
     storageLocation = nullableString("storageLocation"),
     locationSource = nullableString("locationSource"),
     locationChangedAtEpochMillis = nullableLong("locationChangedAtEpochMillis"),
-    fillLevel = nullableString("fillLevel"),
+    packageSize = packageSize,
     purchasedAtEpochMillis = nullableLong("purchasedAtEpochMillis"),
     expiresAtEpochMillis = nullableLong("expiresAtEpochMillis"),
     expiryRangeEndEpochMillis = nullableLong("expiryRangeEndEpochMillis"),
@@ -1713,6 +1997,7 @@ internal fun JSONObject.toInventoryItem(): InventoryItem = InventoryItem(
     printedDateType = nullableString("printedDateType"),
     receiptId = nullableString("receiptId"),
     receiptItemId = nullableString("receiptItemId"),
+    barcode = nullableString("barcode"),
     addedAtEpochMillis = optLong("addedAtEpochMillis", 0L),
 )
 

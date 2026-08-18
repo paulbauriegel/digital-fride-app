@@ -17,7 +17,7 @@ class ConsumptionLogTest {
             quantity = 200.0,
             unit = "g",
             priceCents = 129,
-            fillLevel = FillLevel.LOW.name,
+            packageSize = 250.0,
             reason = ConsumptionReason.THROWN_AWAY,
             addedAtEpochMillis = 1_700_000_000_000L,
             expiresAtEpochMillis = 1_700_300_000_000L,
@@ -42,7 +42,7 @@ class ConsumptionLogTest {
 
         assertEquals(event, restored)
         assertNull(restored?.priceCents)
-        assertNull(restored?.fillLevel)
+        assertNull(restored?.packageSize)
     }
 
     @Test

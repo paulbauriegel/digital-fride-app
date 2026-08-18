@@ -1,6 +1,5 @@
 package com.example.groceriesapp.data.recipes
 
-import com.example.groceriesapp.data.FillLevel
 import com.example.groceriesapp.data.InventoryItem
 import com.example.groceriesapp.data.isCountable
 
@@ -11,8 +10,15 @@ sealed interface CookConsumption {
     /** Subtract [amount] in the item's own unit; reaching zero removes the item. */
     data class Decrement(override val itemId: String, val amount: Double) : CookConsumption
 
-    /** Coarse "used some" for amounts we can't subtract numerically. */
-    data class StepFillLevel(override val itemId: String, val newLevel: FillLevel) : CookConsumption
+    /**
+     * "Used some" for amounts we can't subtract numerically. Carries the pack size so a row that
+     * wasn't tracking its amount can start doing so from the cook flow.
+     */
+    data class UseSome(
+        override val itemId: String,
+        val newQuantity: Double,
+        val packageSize: Double,
+    ) : CookConsumption
 
     data class RemoveAll(override val itemId: String) : CookConsumption
 }
@@ -20,7 +26,7 @@ sealed interface CookConsumption {
 /** What applying one [CookConsumption] does to its inventory row. */
 sealed interface CookOutcome {
     data class UpdateQuantity(val newQuantity: Double) : CookOutcome
-    data class SetFillLevel(val newLevel: FillLevel) : CookOutcome
+    data class SetAmount(val newQuantity: Double, val packageSize: Double) : CookOutcome
     data object Remove : CookOutcome
 }
 
@@ -42,14 +48,27 @@ object CookPlanner {
                     CookOutcome.UpdateQuantity(remaining)
                 }
             }
-            is CookConsumption.StepFillLevel ->
-                if (consumption.newLevel == FillLevel.EMPTY) {
+            is CookConsumption.UseSome ->
+                if (consumption.newQuantity <= consumption.packageSize * USED_UP_FRACTION) {
                     CookOutcome.Remove
                 } else {
-                    CookOutcome.SetFillLevel(consumption.newLevel)
+                    CookOutcome.SetAmount(consumption.newQuantity, consumption.packageSize)
                 }
             is CookConsumption.RemoveAll -> CookOutcome.Remove
         }
+
+    /**
+     * Below this share of a pack, "used some" reads as "used up" and the row leaves instead — a
+     * backstop for an amount edited down to a residue, not the step ladder's own floor.
+     */
+    private const val USED_UP_FRACTION = 0.1
+
+    /**
+     * The smallest share of a pack the halving ladder will step *to*. A quarter left is the last
+     * rung; anything below removes the row instead, exactly where the coarse LOW bucket used to
+     * hand over to removal.
+     */
+    private const val LAST_STEP_FRACTION = 0.25
 
     private const val QUANTITY_EPSILON = 1e-9
 
@@ -86,16 +105,24 @@ object CookPlanner {
         return plan
     }
 
-    private fun stepDown(item: InventoryItem): CookConsumption {
+    /**
+     * The default "used some" step for an amount we can't subtract numerically: halve what's left.
+     *
+     * Halving reproduces the coarse ladder this replaced — full → half → a quarter → gone — while
+     * generalising to whatever the row actually holds. A row that wasn't tracking its amount
+     * starts doing so here, taking its purchased quantity as the pack size, because "half of it"
+     * is a claim the cook flow can make honestly and "half of unknown" is not.
+     */
+    internal fun stepDown(item: InventoryItem): CookConsumption {
         if (item.isCountable && item.quantity > 1.0) {
             return CookConsumption.Decrement(item.id, 1.0)
         }
-        val current = item.fillLevel?.let { name -> FillLevel.entries.firstOrNull { it.name == name } }
-        return when (current) {
-            null -> CookConsumption.StepFillLevel(item.id, FillLevel.HALF)
-            FillLevel.FULL -> CookConsumption.StepFillLevel(item.id, FillLevel.HALF)
-            FillLevel.HALF -> CookConsumption.StepFillLevel(item.id, FillLevel.LOW)
-            FillLevel.LOW, FillLevel.EMPTY -> CookConsumption.RemoveAll(item.id)
+        val packageSize = item.packageSize ?: item.quantity
+        val halved = item.quantity / 2.0
+        return if (halved < packageSize * LAST_STEP_FRACTION - QUANTITY_EPSILON) {
+            CookConsumption.RemoveAll(item.id)
+        } else {
+            CookConsumption.UseSome(item.id, halved, packageSize)
         }
     }
 }

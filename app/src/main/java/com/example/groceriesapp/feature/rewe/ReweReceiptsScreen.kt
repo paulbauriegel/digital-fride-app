@@ -33,6 +33,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -43,6 +44,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.groceriesapp.data.GroceriesRepository
 import com.example.groceriesapp.data.ReceiptItem
 import com.example.groceriesapp.data.ReweRepository
@@ -77,6 +79,15 @@ fun ReweReceiptsScreen(
     val context = LocalContext.current
     val extractor = remember(context) { ReweReceiptPdfExtractor(context) }
     val parser = remember { ReweReceiptParser() }
+    val syncState by reweRepository.syncState.collectAsStateWithLifecycle()
+
+    // The receipt list lives only in memory, so opening this screen always refreshes it —
+    // "import" should never require a manual pull in Settings first.
+    LaunchedEffect(Unit) {
+        if (reweRepository.syncState.value !is ReweRepository.SyncState.FETCHING) {
+            reweRepository.fetchReceipts()
+        }
+    }
 
     Scaffold(
         modifier = modifier,
@@ -98,19 +109,52 @@ fun ReweReceiptsScreen(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.medium),
                     ) {
-                        Icon(
-                            Icons.Default.Receipt,
-                            contentDescription = null,
-                            modifier = Modifier.size(64.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Text("No receipts found", style = MaterialTheme.typography.titleLarge)
-                        Text(
-                            "Pull receipts first from Settings, or your REWE account has none yet.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            textAlign = TextAlign.Center,
-                        )
+                        when (val state = syncState) {
+                            is ReweRepository.SyncState.FETCHING -> {
+                                CircularProgressIndicator()
+                                Text(
+                                    "Loading receipts…",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            is ReweRepository.SyncState.ERROR -> {
+                                Icon(
+                                    Icons.Default.Receipt,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(64.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                Text(
+                                    "Couldn't load receipts",
+                                    style = MaterialTheme.typography.titleLarge,
+                                )
+                                Text(
+                                    state.message,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.error,
+                                    textAlign = TextAlign.Center,
+                                )
+                                Button(onClick = { scope.launch { reweRepository.fetchReceipts() } }) {
+                                    Text("Retry")
+                                }
+                            }
+                            else -> {
+                                Icon(
+                                    Icons.Default.Receipt,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(64.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                Text("No receipts found", style = MaterialTheme.typography.titleLarge)
+                                Text(
+                                    "Your REWE account has no receipts yet.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = TextAlign.Center,
+                                )
+                            }
+                        }
                     }
                 }
             } else {

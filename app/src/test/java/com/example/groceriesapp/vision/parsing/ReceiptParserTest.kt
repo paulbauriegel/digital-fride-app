@@ -86,6 +86,54 @@ class ReceiptParserTest {
     }
 
     @Test
+    fun attachesPieceSubLineToPrecedingItemInsteadOfInventingOne() {
+        val result = parser.parse(
+            """
+            REWE
+            Mango Ayran 1,70
+            2 Stk x 0,85
+            SUMME 1,70
+            """.trimIndent(),
+        )
+
+        val item = result.items.single()
+        assertEquals("Mango ayran", item.name)
+        assertEquals(2.0, item.quantity, 0.001)
+        assertEquals("pc", item.unit)
+        assertEquals(170L, item.lineTotalCents)
+    }
+
+    @Test
+    fun attachesWeightSubLineToPrecedingItem() {
+        val result = parser.parse(
+            """
+            REWE
+            Zwetschge 2,07
+            1,558 kg x 1,33 EUR/kg
+            SUMME 2,07
+            """.trimIndent(),
+        )
+
+        val item = result.items.single()
+        assertEquals(1.558, item.quantity, 0.001)
+        assertEquals("kg", item.unit)
+        assertEquals(207L, item.lineTotalCents)
+    }
+
+    @Test
+    fun dropsSubQuantityLineWithoutPrecedingItem() {
+        val result = parser.parse(
+            """
+            REWE
+            3 Stk x 2,49
+            SUMME 7,47
+            """.trimIndent(),
+        )
+
+        assertTrue(result.items.isEmpty())
+    }
+
+    @Test
     fun marksOcrAmbiguityForExplicitReview() {
         val result = parser.parse(
             """

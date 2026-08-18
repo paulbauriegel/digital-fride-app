@@ -1,15 +1,22 @@
 package com.example.groceriesapp.feature.recipes
 
+import android.graphics.Bitmap
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -58,9 +65,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.core.content.FileProvider
 import com.example.groceriesapp.data.InventoryItem
 import com.example.groceriesapp.data.recipes.Recipe
 import com.example.groceriesapp.data.recipes.RecipeFilters
@@ -74,6 +85,7 @@ import com.example.groceriesapp.ui.components.SectionHeader
 import com.example.groceriesapp.ui.theme.spacing
 import java.io.File
 import java.time.LocalDate
+import java.util.UUID
 import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.text.KeyboardOptions
@@ -100,6 +112,7 @@ fun RecipesScreen(
     onScanRecipeGallery: () -> Unit,
     onImportRecipeUrl: (String) -> Unit,
     onGenerateIdeas: () -> Unit,
+    onGenerateRecipe: (request: String, photo: Bitmap?) -> Unit,
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -111,6 +124,7 @@ fun RecipesScreen(
     var favoritesOnly by rememberSaveable { mutableStateOf(false) }
     var addMenuOpen by remember { mutableStateOf(false) }
     var urlDialogOpen by rememberSaveable { mutableStateOf(false) }
+    var generateDialogOpen by rememberSaveable { mutableStateOf(false) }
 
     val allRecipes = remember(curatedRecipes, userRecipes, generatedRecipes) {
         userRecipes + generatedRecipes + curatedRecipes
@@ -187,6 +201,19 @@ fun RecipesScreen(
                             },
                         )
                         if (aiEnabled) {
+                            // Asks for one specific recipe, unlike the "Get AI ideas" link on the
+                            // More ideas header, which shotguns suggestions from the inventory.
+                            DropdownMenuItem(
+                                text = { Text("Generate with AI") },
+                                enabled = !aiBusy,
+                                leadingIcon = {
+                                    Icon(Icons.Default.AutoAwesome, contentDescription = null)
+                                },
+                                onClick = {
+                                    addMenuOpen = false
+                                    generateDialogOpen = true
+                                },
+                            )
                             DropdownMenuItem(
                                 text = { Text("Photograph recipe") },
                                 leadingIcon = {
@@ -398,6 +425,151 @@ fun RecipesScreen(
             onDismiss = { urlDialogOpen = false },
         )
     }
+
+    if (generateDialogOpen) {
+        GenerateRecipeDialog(
+            onGenerate = { request, photo ->
+                generateDialogOpen = false
+                onGenerateRecipe(request, photo)
+            },
+            onDismiss = { generateDialogOpen = false },
+        )
+    }
+}
+
+/**
+ * Asks for one specific recipe: a description, a photo, or both. A photo alone is a valid brief —
+ * it may be a dish to recreate, ingredients on the counter, or a handwritten card — so the confirm
+ * button unlocks on either input.
+ */
+@Composable
+private fun GenerateRecipeDialog(
+    onGenerate: (String, Bitmap?) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val context = LocalContext.current
+    var request by rememberSaveable { mutableStateOf("") }
+    // Bitmaps are far too large for saved instance state; a process death during the camera round
+    // trip loses the photo, and the dialog reopens with just the typed text.
+    var photo by remember { mutableStateOf<Bitmap?>(null) }
+    var cameraFile by remember { mutableStateOf<File?>(null) }
+
+    val galleryLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickVisualMedia(),
+    ) { uri ->
+        uri?.let { photo = decodeOrientedBitmap(context, it) }
+    }
+    val cameraLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.TakePicture(),
+    ) { success ->
+        val file = cameraFile
+        cameraFile = null
+        if (success && file != null) photo = decodeOrientedBitmap(file)
+        file?.delete()
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = { Icon(Icons.Default.AutoAwesome, contentDescription = null) },
+        title = { Text("Generate a recipe") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small)) {
+                Text(
+                    "Describe the dish you want, add a photo of it, or both. You get one " +
+                        "recipe back, using your inventory where it fits.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                OutlinedTextField(
+                    value = request,
+                    onValueChange = { request = it },
+                    label = { Text("What should it be?") },
+                    placeholder = { Text("a quick vegan pasta for two") },
+                    minLines = 2,
+                    maxLines = 4,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Default),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                val currentPhoto = photo
+                if (currentPhoto != null) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small),
+                    ) {
+                        Image(
+                            bitmap = currentPhoto.asImageBitmap(),
+                            contentDescription = "Attached photo",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .size(64.dp)
+                                .clip(MaterialTheme.shapes.small),
+                        )
+                        Text(
+                            "Photo attached",
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.weight(1f),
+                        )
+                        IconButton(onClick = { photo = null }) {
+                            Icon(Icons.Default.Close, contentDescription = "Remove photo")
+                        }
+                    }
+                } else {
+                    Row(horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small)) {
+                        TextButton(
+                            onClick = {
+                                val directory = File(context.cacheDir, "camera").apply(File::mkdirs)
+                                val file = File(directory, "recipe_prompt_${UUID.randomUUID()}.jpg")
+                                cameraFile = file
+                                cameraLauncher.launch(
+                                    FileProvider.getUriForFile(
+                                        context,
+                                        "${context.packageName}.files",
+                                        file,
+                                    ),
+                                )
+                            },
+                        ) {
+                            Icon(
+                                Icons.Default.PhotoCamera,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp),
+                            )
+                            Spacer(Modifier.size(MaterialTheme.spacing.extraSmall))
+                            Text("Take photo")
+                        }
+                        TextButton(
+                            onClick = {
+                                galleryLauncher.launch(
+                                    PickVisualMediaRequest(
+                                        ActivityResultContracts.PickVisualMedia.ImageOnly,
+                                    ),
+                                )
+                            },
+                        ) {
+                            Icon(
+                                Icons.Default.PhotoLibrary,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp),
+                            )
+                            Spacer(Modifier.size(MaterialTheme.spacing.extraSmall))
+                            Text("Add photo")
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onGenerate(request, photo) },
+                enabled = request.isNotBlank() || photo != null,
+            ) {
+                Text("Generate")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        },
+    )
 }
 
 /**
@@ -538,10 +710,11 @@ private fun SaveButton(
     }
 }
 
+/** Fixed-width pill: it never wraps or shrinks, so callers must give the title the flexible slot. */
 @Composable
 private fun AiTag(modifier: Modifier = Modifier) {
     Surface(
-        modifier = modifier,
+        modifier = modifier.wrapContentWidth(unbounded = true),
         shape = CircleShape,
         color = MaterialTheme.colorScheme.secondaryContainer,
         contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
@@ -559,7 +732,12 @@ private fun AiTag(modifier: Modifier = Modifier) {
                 contentDescription = null,
                 modifier = Modifier.size(12.dp),
             )
-            Text("AI", style = MaterialTheme.typography.labelSmall)
+            Text(
+                "AI",
+                style = MaterialTheme.typography.labelSmall,
+                maxLines = 1,
+                softWrap = false,
+            )
         }
     }
 }
@@ -673,11 +851,15 @@ private fun MoreIdeaRow(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small),
                 ) {
+                    // Weighted so the title yields space instead of taking it: unweighted
+                    // children are measured first, which left a long title squeezing the tag
+                    // down to a two-letter stack.
                     Text(
                         text = match.recipe.title,
                         style = MaterialTheme.typography.titleSmall,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false),
                     )
                     if (match.recipe.source == RecipeSource.AI) {
                         AiTag()

@@ -49,7 +49,7 @@ class ReceiptParser(
         val merchant = findMerchant(lines)
         val total = findTotal(lines)
         val purchasedAt = findDate(lines)
-        val items = lines.mapNotNull(::parseItem)
+        val items = parseItems(lines)
 
         return ParsedReceipt(
             merchant = merchant,
@@ -95,6 +95,33 @@ class ReceiptParser(
             }
         }
         return null
+    }
+
+    /**
+     * OCR flattens the indentation that marks a "2 Stk x 0,85" / "1,558 kg x 1,33 EUR/kg" line as
+     * a continuation of the item above it, so such lines are recognised by shape instead and
+     * attached to the previous item. Without this they either vanish (the kg form) or match
+     * [ITEM_LINE] and become a phantom item named "2 Stk x" (the piece form).
+     */
+    private fun parseItems(lines: List<String>): List<ParsedLineItem> {
+        val items = mutableListOf<ParsedLineItem>()
+        for (line in lines) {
+            val subQuantity = SUB_QUANTITY_LINE.matchEntire(line)
+            if (subQuantity != null) {
+                val quantity = subQuantity.groupValues[1].replace(',', '.').toDoubleOrNull()
+                val last = items.lastOrNull()
+                if (quantity != null && last != null) {
+                    items[items.lastIndex] = last.copy(
+                        quantity = quantity,
+                        unit = normalizeUnit(subQuantity.groupValues[2].lowercase(Locale.ROOT)),
+                    )
+                }
+                // Consumed even when there is no item to attach it to — it is never an item.
+                continue
+            }
+            parseItem(line)?.let(items::add)
+        }
+        return items
     }
 
     private fun parseItem(line: String): ParsedLineItem? {
@@ -196,6 +223,11 @@ class ReceiptParser(
             RegexOption.IGNORE_CASE,
         )
         val LEADING_COUNT = Regex("^(\\d+)\\s*[xX]\\s*")
+        val SUB_QUANTITY_LINE = Regex(
+            "^(\\d+(?:[.,]\\d+)?)\\s*(Stk|St|kg)\\.?\\s*[xX×]\\s*(\\d{1,4}[.,]\\d{2})" +
+                "(?:\\s*(?:EUR|€)?\\s*/\\s*kg)?$",
+            RegexOption.IGNORE_CASE,
+        )
         val OCR_AMBIGUITY = Regex("[^\\p{L}\\p{N} .,&+\\-/]")
         val HEADER_NOISE = listOf(
             "kassenbon",

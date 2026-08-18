@@ -52,6 +52,40 @@ object OpenAiRecipePrompts {
         $inventoryPrompt
     """.trimIndent()
 
+    /**
+     * A user-driven request for exactly one recipe: free text, an attached photo, or both.
+     *
+     * Unlike [suggestUserContent] the inventory is context rather than the brief — someone who asks
+     * for lasagne wants lasagne, with a shopping gap, not the nearest thing the fridge allows.
+     */
+    fun requestUserContent(
+        request: String,
+        inventoryPrompt: String,
+        hasPhoto: Boolean,
+    ): String = buildString {
+        append("Write exactly ONE recipe for the request below. Return a single entry in ")
+        append("\"recipes\".\n\n")
+        if (hasPhoto) {
+            append(
+                "The attached photo is part of the request. It may show a finished dish to " +
+                    "recreate, loose ingredients to cook with, or a written recipe to " +
+                    "transcribe — work out which, and name the dish in the title.\n\n",
+            )
+        }
+        if (request.isNotBlank()) {
+            append("What the user asked for:\n")
+            append(request.trim())
+            append("\n\n")
+        }
+        append(
+            "Follow the request even when the inventory does not cover it: list whatever the " +
+                "dish needs and let the user shop for the rest. The inventory below is only " +
+                "context for sensible substitutions and amounts.\n\n",
+        )
+        append("Inventory (conceptId | name | amount | location | expiry):\n")
+        append(inventoryPrompt)
+    }
+
     fun adaptUserContent(recipeJson: String, inventoryPrompt: String): String = """
         Adapt the following recipe so it uses only what this inventory offers. Substitute or drop
         what is missing, keep the spirit of the dish, and scale amounts to what is actually there

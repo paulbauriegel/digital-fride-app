@@ -1,6 +1,6 @@
 package com.example.groceriesapp.data.recipes
 
-import com.example.groceriesapp.data.FillLevel
+import com.example.groceriesapp.data.fillFraction
 import com.example.groceriesapp.data.InventoryItem
 import java.time.Instant
 import java.time.LocalDate
@@ -59,7 +59,10 @@ class RecipeMatcher(private val zoneId: ZoneId = ZoneId.systemDefault()) {
         favoriteIds: Set<String> = emptySet(),
         useExpiringFirst: Boolean = true,
     ): RecipeMatch {
-        val usable = inventory.filter { it.fillLevel != FillLevel.EMPTY.name }
+        // An item tracked down to a residue is not something to plan a meal around. Untracked
+        // rows (null fraction) stay in — not knowing how much is left is not the same as knowing
+        // there is none.
+        val usable = inventory.filter { (it.fillFraction ?: 1f) > USED_UP_FRACTION }
         val byConcept = usable.filter { it.foodConceptId != null }.groupBy { it.foodConceptId }
 
         val matches = recipe.ingredients.map { ingredient ->
@@ -203,5 +206,8 @@ class RecipeMatcher(private val zoneId: ZoneId = ZoneId.systemDefault()) {
     private companion object {
         const val BEST_MATCH_COVERAGE = 0.75
         const val BEST_MATCH_LIMIT = 5
+
+        /** At or below this share of a pack an item is a residue, not an ingredient. */
+        const val USED_UP_FRACTION = 0.05f
     }
 }

@@ -18,6 +18,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.groceriesapp.data.BioCompanyRepository
 import com.example.groceriesapp.data.GroceriesRepository
 import com.example.groceriesapp.data.ReweRepository
+import com.example.groceriesapp.data.products.ProductLookupRepository
 import com.example.groceriesapp.data.household.HouseholdRepository
 import com.example.groceriesapp.data.recipes.RecipesRepository
 import com.example.groceriesapp.data.taxonomy.ShelfLifeCatalog
@@ -44,6 +45,8 @@ class MainActivity : ComponentActivity() {
         val recipesRepository = RecipesRepository(applicationContext)
         val bioCompanyRepository = BioCompanyRepository(applicationContext)
         val reweRepository = ReweRepository(applicationContext)
+        // Household-independent: a barcode means the same product whichever household is active.
+        val productLookupRepository = ProductLookupRepository()
         val preferences = getSharedPreferences("appearance", MODE_PRIVATE)
 
         setContent {
@@ -113,6 +116,7 @@ class MainActivity : ComponentActivity() {
                         recipesRepository = recipesRepository,
                         bioCompanyRepository = bioCompanyRepository,
                         reweRepository = reweRepository,
+                        productLookupRepository = productLookupRepository,
                         widthSizeClass = calculateWindowSizeClass(this).widthSizeClass,
                         userName = userName,
                         onUserNameChanged = { name ->
