@@ -54,6 +54,7 @@ import com.example.groceriesapp.data.taxonomy.StorageLocation
 import com.example.groceriesapp.data.taxonomy.resolveIconRes
 import com.example.groceriesapp.feature.inventory.AddInventoryItemDialog
 import com.example.groceriesapp.feature.inventory.AddItemMethodSheet
+import com.example.groceriesapp.feature.receipts.ReceiptCaptureSheet
 import com.example.groceriesapp.feature.recipes.RecipeImage
 import com.example.groceriesapp.ui.components.EmptyStateCard
 import com.example.groceriesapp.ui.components.SectionHeader
@@ -81,7 +82,9 @@ fun OverviewScreen(
     favoriteRecipeIds: Set<String>,
     imagesDir: File,
     imageVersion: Int,
-    onScanReceipt: () -> Unit,
+    onTakeReceiptPhoto: () -> Unit,
+    onPickReceiptPhoto: () -> Unit,
+    onScanLongReceipt: () -> Unit,
     onAddItem: (InventoryItem) -> Unit,
     onScanBarcode: () -> Unit,
     onOpenInventory: (StorageLocation?) -> Unit,
@@ -93,6 +96,7 @@ fun OverviewScreen(
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
     var showAddChoice by rememberSaveable { mutableStateOf(false) }
     var showAddDialog by rememberSaveable { mutableStateOf(false) }
+    var showCaptureChoice by rememberSaveable { mutableStateOf(false) }
     val useSoon = remember(inventory) {
         inventory
             .filter { expiresSoon(it) }
@@ -143,10 +147,10 @@ fun OverviewScreen(
                 item {
                     EmptyStateCard(
                         title = "Turn paper receipts into your fridge",
-                        body = "Record the receipt freely. We track the paper, keep only sharp " +
-                            "overlapping views, and build one continuous receipt for review.",
+                        body = "Photograph a receipt and we read the items off it for review. " +
+                            "A long one can be recorded section by section instead.",
                         actionLabel = "Scan first receipt",
-                        onAction = onScanReceipt,
+                        onAction = { showCaptureChoice = true },
                         icon = Icons.Default.CameraAlt,
                     )
                 }
@@ -187,7 +191,7 @@ fun OverviewScreen(
                         QuickActionTile(
                             icon = Icons.Default.DocumentScanner,
                             label = "Scan receipt",
-                            onClick = onScanReceipt,
+                            onClick = { showCaptureChoice = true },
                             modifier = Modifier.weight(1f),
                         )
                         QuickActionTile(
@@ -225,6 +229,15 @@ fun OverviewScreen(
                 }
             }
         }
+    }
+
+    if (showCaptureChoice) {
+        ReceiptCaptureSheet(
+            onTakePhoto = onTakeReceiptPhoto,
+            onPickPhoto = onPickReceiptPhoto,
+            onScanLongReceipt = onScanLongReceipt,
+            onDismiss = { showCaptureChoice = false },
+        )
     }
 
     if (showAddChoice) {
@@ -453,9 +466,9 @@ private fun FirstScanSteps() {
             modifier = Modifier.padding(MaterialTheme.spacing.large),
             verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.medium),
         ) {
-            Text("How receipt recording works", style = MaterialTheme.typography.titleMedium)
-            StepRow("1", "Find the paper", "Wait for the live receipt outline.")
-            StepRow("2", "Move freely", "Slow movement is fine; sharp overlapping views are selected automatically.")
+            Text("How receipt scanning works", style = MaterialTheme.typography.titleMedium)
+            StepRow("1", "Take a photo", "One shot is enough for a short receipt.")
+            StepRow("2", "Or record a long one", "Move along the paper; sharp overlapping views are selected automatically.")
             StepRow("3", "Review", "Confirm recognized groceries before adding them.")
         }
     }

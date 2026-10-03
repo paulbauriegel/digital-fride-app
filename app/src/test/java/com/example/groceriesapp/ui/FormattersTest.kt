@@ -112,6 +112,33 @@ class FormattersTest {
     }
 
     @Test
+    fun aCorrectedReceiptDateWithoutATimeStaysDateOnly() {
+        val undated = LocalDate.of(2026, 5, 18)
+            .atStartOfDay(ZoneId.of("UTC"))
+            .toInstant()
+            .toEpochMilli()
+
+        val stored = datePickerMillisToReceiptDate(undated, currentDateEpochMillis = null)
+
+        // Local midnight, so the receipt list keeps printing a bare date instead of inventing
+        // a checkout time.
+        assertEquals("May 18", formatReceiptTimestamp(stored, scannedAt))
+    }
+
+    @Test
+    fun aCorrectedReceiptDateKeepsTheCheckoutTimeItAlreadyHad() {
+        val purchasedAt = epochOf(LocalDateTime.of(2026, 8, 8, 18, 54, 44))
+        val picked = LocalDate.of(2026, 8, 9)
+            .atStartOfDay(ZoneId.of("UTC"))
+            .toInstant()
+            .toEpochMilli()
+
+        val stored = datePickerMillisToReceiptDate(picked, currentDateEpochMillis = purchasedAt)
+
+        assertEquals("Aug 9, 18:54", formatReceiptTimestamp(stored, scannedAt))
+    }
+
+    @Test
     fun aPickedDateSurvivesADaylightSavingBoundary() {
         // Noon anchoring is what keeps a spring-forward from rolling the date back a day.
         listOf(LocalDate.of(2026, 3, 29), LocalDate.of(2026, 10, 25)).forEach { date ->

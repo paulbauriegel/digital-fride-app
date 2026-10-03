@@ -150,6 +150,29 @@ fun datePickerMillisToLocal(utcMillis: Long): Long =
         .toInstant()
         .toEpochMilli()
 
+/**
+ * Applies a picked calendar day to a receipt's purchase date, keeping whatever time of day the
+ * receipt already carried.
+ *
+ * Receipt dates are not expiry dates: [formatReceiptTimestamp] prints the time only when the
+ * instant is not local midnight, because a bare date — what the OCR parser and BIO COMPANY's API
+ * both yield — must not be shown with an invented checkout time. So a corrected date lands on
+ * local midnight for those, and keeps the real checkout time for the API receipts that carry one.
+ */
+fun datePickerMillisToReceiptDate(utcMillis: Long, currentDateEpochMillis: Long?): Long {
+    val zone = ZoneId.systemDefault()
+    val timeOfDay = currentDateEpochMillis
+        ?.let { Instant.ofEpochMilli(it).atZone(zone).toLocalTime() }
+        ?: LocalTime.MIDNIGHT
+    return Instant.ofEpochMilli(utcMillis)
+        .atZone(ZoneId.of("UTC"))
+        .toLocalDate()
+        .atTime(timeOfDay)
+        .atZone(zone)
+        .toInstant()
+        .toEpochMilli()
+}
+
 /** The inverse of [datePickerMillisToLocal], for seeding the picker from a stored date. */
 fun localMillisToDatePicker(epochMillis: Long): Long =
     Instant.ofEpochMilli(epochMillis)

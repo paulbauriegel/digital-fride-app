@@ -3,6 +3,7 @@ package com.example.groceriesapp.data
 import com.example.groceriesapp.data.taxonomy.StorageLocation
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Test
 
@@ -29,6 +30,7 @@ class InventoryItemJsonTest {
             receiptId = "receipt-1",
             receiptItemId = "item-1",
             barcode = "4008400202020",
+            hidden = true,
         )
 
         val restored = item.toJson().toInventoryItem()
@@ -54,6 +56,9 @@ class InventoryItemJsonTest {
         assertNull(restored.packageSize)
         assertNull(restored.barcode)
         assertEquals("Greek Yogurt", restored.name)
+        // An index written before the flag existed must read as "shown", not as hidden — an item
+        // silently disappearing from the list would look like data loss.
+        assertFalse(restored.hidden)
     }
 
     @Test

@@ -89,6 +89,18 @@ internal val drinksConcepts: List<FoodConcept> = listOf(
         keywords = listOf("wodka", "whisky", "likör"),
     ),
     FoodConcept(
+        id = "SYRUP",
+        category = GroceryCategory.DRINKS,
+        displayName = "Syrup",
+        // No syrup artwork in the bundled icon set; a cordial is a drink concentrate, so it
+        // borrows JUICE's bottle rather than the honey pot.
+        iconRes = R.drawable.ic_food_juice,
+        // "holund" covers both the full "Holunder" and REWE's truncated "Rewe Bio Holund." —
+        // elderberry reaches us as a cordial, never as the raw berry. It stays shorter than
+        // SOFT_DRINK's "bionade", so "Bionade Holunder" is still a soft drink.
+        keywords = listOf("sirup", "holund"),
+    ),
+    FoodConcept(
         id = "SMOOTHIE",
         category = GroceryCategory.DRINKS,
         displayName = "Smoothie",

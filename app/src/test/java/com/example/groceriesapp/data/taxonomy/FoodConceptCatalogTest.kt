@@ -401,4 +401,27 @@ class FoodConceptCatalogTest {
         // RADISH, via that concept's "rettich" keyword, which is a separate pre-existing gap.)
         assertNotEquals("CHEESE_FRESH", FoodConceptCatalog.match("Meerrettich")?.id)
     }
+
+    /**
+     * Reported 2026-08-26 from a real REWE receipt: three rows the catalogue matched nothing at
+     * all. "Trau. Rot KL Bio" is red grapes behind REWE's dotted abbreviation, "Fun Box Haribo"
+     * names only the brand, and "Rewe Bio Holund." is elderberry cordial — a product the
+     * catalogue had no concept for.
+     */
+    @Test
+    fun reweReceiptAbbreviationsAndBrandsResolve() {
+        val samples = mapOf(
+            "Trau. Rot KL Bio" to "GRAPES",
+            "Fun Box Haribo" to "CANDY",
+            "Rewe Bio Holund." to "SYRUP",
+            "Holunder Sirup" to "SYRUP",
+        )
+        samples.forEach { (name, expectedId) ->
+            assertEquals("\"$name\"", expectedId, FoodConceptCatalog.match(name)?.id)
+        }
+        // The grape abbreviation must not swallow grape juice, whose own keyword is longer.
+        assertEquals("JUICE", FoodConceptCatalog.match("Roter Traubensaft")?.id)
+        // Nor must the cordial swallow the branded elderflower lemonade.
+        assertEquals("SOFT_DRINK", FoodConceptCatalog.match("Bionade Holunder")?.id)
+    }
 }

@@ -7,14 +7,17 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Edit
@@ -38,6 +41,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -56,6 +60,7 @@ import com.example.groceriesapp.data.taxonomy.resolveIconRes
 import com.example.groceriesapp.ui.components.MerchantBadge
 import com.example.groceriesapp.ui.formatCurrency
 import com.example.groceriesapp.ui.formatDate
+import com.example.groceriesapp.ui.formatAmount
 import com.example.groceriesapp.ui.formatQuantity
 import com.example.groceriesapp.ui.theme.spacing
 
@@ -73,11 +78,20 @@ fun ReceiptDetailScreen(
     onShare: () -> Unit,
     onDelete: () -> Unit,
     onRenameMerchant: (String?) -> Unit,
+    onEditSummary: (dateEpochMillis: Long?, totalCents: Int?) -> Unit,
+    onUpdateItem: (ReceiptItem) -> Unit,
+    onAddItem: (ReceiptItem) -> Unit,
+    onDeleteItem: (String) -> Unit,
     merchantSuggestions: List<String>,
     modifier: Modifier = Modifier,
 ) {
     var showDeleteDialog by rememberSaveable { mutableStateOf(false) }
     var showRenameDialog by rememberSaveable { mutableStateOf(false) }
+    var showSummaryDialog by rememberSaveable { mutableStateOf(false) }
+    // Held as an id, not the item: the receipt is re-read from the repository on every change, so
+    // an item captured here would go stale the moment it is edited.
+    var editingItemId by rememberSaveable { mutableStateOf<String?>(null) }
+    var showAddItemDialog by rememberSaveable { mutableStateOf(false) }
     var menuOpen by remember { mutableStateOf(false) }
     val hasImage = receipt.tilePaths.isNotEmpty() || receipt.originalFramePaths.isNotEmpty()
     val importedCount = receipt.items.count { it.id in receipt.importedItemIds }
@@ -107,6 +121,20 @@ fun ReceiptDetailScreen(
                                 onClick = {
                                     menuOpen = false
                                     showRenameDialog = true
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Edit date & total") },
+                                onClick = {
+                                    menuOpen = false
+                                    showSummaryDialog = true
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Add item") },
+                                onClick = {
+                                    menuOpen = false
+                                    showAddItemDialog = true
                                 },
                             )
                             if (hasImage) {
@@ -196,16 +224,33 @@ fun ReceiptDetailScreen(
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    Text(
-                        formatCurrency(receipt.totalCents, receipt.currency),
-                        style = MaterialTheme.typography.headlineLarge,
-                        fontWeight = FontWeight.Bold,
-                    )
+                    // Total and date are scanned figures and just as often wrong as the store
+                    // line, so they carry the same tap-to-correct affordance.
+                    Row(
+                        modifier = Modifier.clickable { showSummaryDialog = true },
+                        horizontalArrangement = Arrangement.spacedBy(
+                            MaterialTheme.spacing.extraSmall,
+                        ),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            formatCurrency(receipt.totalCents, receipt.currency),
+                            style = MaterialTheme.typography.headlineLarge,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        Icon(
+                            Icons.Default.Edit,
+                            contentDescription = "Edit date and total",
+                            modifier = Modifier.size(18.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                     Text(
                         "${formatDate(receipt.dateEpochMillis ?: receipt.createdAtEpochMillis)} · " +
                             "${receipt.items.size} ${if (receipt.items.size == 1) "item" else "items"}",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.clickable { showSummaryDialog = true },
                     )
                 }
             }
@@ -235,15 +280,29 @@ fun ReceiptDetailScreen(
                     )
                 }
                 item(key = "items-header") {
-                    Text(
-                        "Items",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(bottom = MaterialTheme.spacing.extraSmall),
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            "Items",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.weight(1f),
+                        )
+                        TextButton(onClick = { showAddItemDialog = true }) {
+                            Icon(
+                                Icons.Default.Add,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp),
+                            )
+                            Spacer(Modifier.width(MaterialTheme.spacing.extraSmall))
+                            Text("Add item")
+                        }
+                    }
                 }
                 items(receipt.items, key = ReceiptItem::id) { item ->
-                    ReceiptItemRow(item)
+                    ReceiptItemRow(item, onClick = { editingItemId = item.id })
                 }
             } else if (receipt.status != ReceiptStatus.PROCESSING) {
                 item(key = "no-items") {
@@ -271,9 +330,18 @@ fun ReceiptDetailScreen(
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
-                            if (hasImage) {
-                                TextButton(onClick = onViewReceipt) {
-                                    Text("View receipt")
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(
+                                    MaterialTheme.spacing.small,
+                                ),
+                            ) {
+                                if (hasImage) {
+                                    TextButton(onClick = onViewReceipt) {
+                                        Text("View receipt")
+                                    }
+                                }
+                                TextButton(onClick = { showAddItemDialog = true }) {
+                                    Text("Add item")
                                 }
                             }
                         }
@@ -292,6 +360,54 @@ fun ReceiptDetailScreen(
                 onRenameMerchant(merchant)
             },
             onDismiss = { showRenameDialog = false },
+        )
+    }
+
+    if (showSummaryDialog) {
+        EditReceiptSummaryDialog(
+            // The stored date, not the created-at fallback the header prints: seeding the picker
+            // with the scan time would turn "date not recognized" into a date the user never set.
+            dateEpochMillis = receipt.dateEpochMillis,
+            totalCents = receipt.totalCents,
+            currency = receipt.currency,
+            onConfirm = { date, total ->
+                showSummaryDialog = false
+                onEditSummary(date, total)
+            },
+            onDismiss = { showSummaryDialog = false },
+        )
+    }
+
+    val editingItem = receipt.items.firstOrNull { it.id == editingItemId }
+    if (editingItem != null) {
+        EditReceiptItemDialog(
+            item = editingItem,
+            alreadyImported = editingItem.id in receipt.importedItemIds,
+            onSave = {
+                editingItemId = null
+                onUpdateItem(it)
+            },
+            onDelete = {
+                editingItemId = null
+                onDeleteItem(editingItem.id)
+            },
+            onDismiss = { editingItemId = null },
+        )
+    } else {
+        // The line went away underneath the dialog — deleted, or the receipt reloaded without it.
+        // Cleared in an effect rather than inline: the id is read just above, and writing it
+        // during composition would be a backwards write.
+        LaunchedEffect(editingItemId) { editingItemId = null }
+    }
+
+    if (showAddItemDialog) {
+        EditReceiptItemDialog(
+            item = null,
+            onSave = {
+                showAddItemDialog = false
+                onAddItem(it)
+            },
+            onDismiss = { showAddItemDialog = false },
         )
     }
 
@@ -399,10 +515,11 @@ private fun ImportStatusRow(
 }
 
 @Composable
-private fun ReceiptItemRow(item: ReceiptItem) {
+private fun ReceiptItemRow(item: ReceiptItem, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .clickable(onClick = onClick)
             .padding(vertical = MaterialTheme.spacing.extraSmall),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small),
@@ -423,10 +540,13 @@ private fun ReceiptItemRow(item: ReceiptItem) {
             }
         }
         Text(
-            if (item.quantity > 1.0) {
-                "${item.name} ×${formatQuantity(item.quantity)}"
-            } else {
-                item.name
+            // A unit-bearing line is a measured amount — EDEKA's weighed produce comes through as
+            // 1.164 kg — so it prints as "×1.2 kg" and prints even below one, where a bare "×1.16"
+            // would read as a piece count. Countable lines keep the plain multiplier.
+            when {
+                item.unit != null -> "${item.name} ×${formatAmount(item.quantity, item.unit)}"
+                item.quantity > 1.0 -> "${item.name} ×${formatQuantity(item.quantity)}"
+                else -> item.name
             },
             style = MaterialTheme.typography.bodyLarge,
             maxLines = 1,
@@ -437,6 +557,14 @@ private fun ReceiptItemRow(item: ReceiptItem) {
             formatCurrency(item.priceCents),
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.SemiBold,
+        )
+        // Same affordance the store name carries above: OCR line items are wrong often enough
+        // that the correction path should be visible without hunting for it.
+        Icon(
+            Icons.Default.Edit,
+            contentDescription = "Edit item",
+            modifier = Modifier.size(16.dp),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }

@@ -103,6 +103,7 @@ fun ScannerScreen(
     ) { granted -> cameraPermissionGranted = granted }
     var showDiscardDialog by remember { mutableStateOf(false) }
     val haptics = LocalHapticFeedback.current
+    val photo = state.source == ScanSource.PHOTO
     val requestClose = {
         if (state.acceptedFramePaths.isEmpty()) {
             viewModel.discardSession()
@@ -112,8 +113,12 @@ fun ScannerScreen(
         }
     }
 
-    LaunchedEffect(Unit) {
-        if (!cameraPermissionGranted) permissionLauncher.launch(Manifest.permission.CAMERA)
+    // Only the live recording opens the camera itself; a photo arrives from the system camera app
+    // or the picker, neither of which needs this app to hold the permission.
+    LaunchedEffect(photo) {
+        if (!photo && !cameraPermissionGranted) {
+            permissionLauncher.launch(Manifest.permission.CAMERA)
+        }
     }
     LaunchedEffect(state.acceptedSections) {
         if (state.acceptedSections > 0) {
@@ -140,26 +145,34 @@ fun ScannerScreen(
     when (state.phase) {
         ScanPhase.PROCESSING, ScanPhase.COMPLETE -> ProcessingReceiptScreen(state)
         ScanPhase.ERROR -> ScannerErrorScreen(
+            title = if (photo) "Photo not imported" else "Scanner stopped",
             message = state.errorMessage.orEmpty(),
-            retryLabel = if (state.processingFailure) "Retry panorama" else "Return to scanner",
+            // An unreadable photo has nothing to return to: it is already gone, and the picker
+            // cannot be reopened from inside this session.
+            retryLabel = when {
+                state.processingFailure && photo -> "Try again"
+                state.processingFailure -> "Retry panorama"
+                photo -> null
+                else -> "Return to scanner"
+            },
+            closeLabel = if (photo) "Discard photo" else "Discard recording",
             onRetry = viewModel::retry,
             onClose = { showDiscardDialog = true },
         )
-        else -> {
-            if (!cameraPermissionGranted) {
-                CameraPermissionScreen(
-                    onRequestPermission = {
-                        permissionLauncher.launch(Manifest.permission.CAMERA)
-                    },
-                    onClose = requestClose,
-                )
-            } else {
-                LiveScanner(
-                    state = state,
-                    viewModel = viewModel,
-                    onClose = requestClose,
-                )
-            }
+        else -> when {
+            // The photo is already on its way into the pipeline, so ARCore is never started for it.
+            photo -> ProcessingReceiptScreen(state)
+            !cameraPermissionGranted -> CameraPermissionScreen(
+                onRequestPermission = {
+                    permissionLauncher.launch(Manifest.permission.CAMERA)
+                },
+                onClose = requestClose,
+            )
+            else -> LiveScanner(
+                state = state,
+                viewModel = viewModel,
+                onClose = requestClose,
+            )
         }
     }
 
@@ -167,9 +180,15 @@ fun ScannerScreen(
         AlertDialog(
             onDismissRequest = { showDiscardDialog = false },
             icon = { Icon(Icons.Default.Warning, contentDescription = null) },
-            title = { Text("Discard this recording?") },
+            title = { Text(if (photo) "Discard this photo?" else "Discard this recording?") },
             text = {
-                Text("The selected receipt keyframes will be removed. Saved receipts and fridge items are not affected.")
+                Text(
+                    if (photo) {
+                        "The imported photo will be removed. Saved receipts and fridge items are not affected."
+                    } else {
+                        "The selected receipt keyframes will be removed. Saved receipts and fridge items are not affected."
+                    },
+                )
             },
             confirmButton = {
                 TextButton(
@@ -179,12 +198,12 @@ fun ScannerScreen(
                         onClose()
                     },
                 ) {
-                    Text("Discard recording")
+                    Text(if (photo) "Discard photo" else "Discard recording")
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showDiscardDialog = false }) {
-                    Text("Keep recording")
+                    Text(if (photo) "Keep photo" else "Keep recording")
                 }
             },
         )
@@ -544,9 +563,32 @@ private fun guidanceContent(
     )
 }
 
+/**
+ * Full-screen backdrop for the scanner's non-camera states.
+ *
+ * A Surface rather than a Box with a background colour: only Surface also sets the content colour,
+ * and without it every Text that does not name its own colour is drawn in the default black —
+ * invisible against the dark surface.
+ */
+@Composable
+private fun ScannerBackdrop(content: @Composable () -> Unit) {
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = MaterialTheme.colorScheme.surface,
+    ) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center,
+        ) {
+            content()
+        }
+    }
+}
+
 @Composable
 private fun ProcessingReceiptScreen(state: ScanUiState) {
     val stage = state.processingStage ?: ProcessingStage.STITCHING
+    val photo = state.source == ScanSource.PHOTO
     val previewPath = state.processingPreviewPath
     val preview by produceState<ImageBitmap?>(null, previewPath) {
         value = previewPath?.let { path ->
@@ -560,12 +602,7 @@ private fun ProcessingReceiptScreen(state: ScanUiState) {
     // The same applies to the parsing stage when a language model extracts the items.
     val indeterminate = (stage == ProcessingStage.RECOGNIZING_TEXT && state.slowOcrEngine) ||
         (stage == ProcessingStage.PARSING_ITEMS && state.slowExtraction)
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.surface),
-        contentAlignment = Alignment.Center,
-    ) {
+    ScannerBackdrop {
         Column(
             modifier = Modifier
                 .widthIn(max = 480.dp)
@@ -576,7 +613,11 @@ private fun ProcessingReceiptScreen(state: ScanUiState) {
             preview?.let { bitmap ->
                 Image(
                     bitmap = bitmap,
-                    contentDescription = "Stitched receipt panorama",
+                    contentDescription = if (photo) {
+                        "Receipt photo"
+                    } else {
+                        "Stitched receipt panorama"
+                    },
                     contentScale = ContentScale.Fit,
                     modifier = Modifier
                         .fillMaxWidth()
@@ -587,7 +628,11 @@ private fun ProcessingReceiptScreen(state: ScanUiState) {
             } ?: CircularProgressIndicator()
             Text(
                 text = when (stage) {
-                    ProcessingStage.STITCHING -> "Building the receipt panorama"
+                    ProcessingStage.STITCHING -> if (photo) {
+                        "Preparing the receipt photo"
+                    } else {
+                        "Building the receipt panorama"
+                    }
                     ProcessingStage.RECOGNIZING_TEXT -> "Reading receipt text"
                     ProcessingStage.PARSING_ITEMS -> "Finding grocery items"
                     ProcessingStage.SAVING -> "Saving the digital receipt"
@@ -597,6 +642,8 @@ private fun ProcessingReceiptScreen(state: ScanUiState) {
             )
             Text(
                 text = when {
+                    stage == ProcessingStage.STITCHING && photo ->
+                        "The receipt is being squared up and cropped out of the photo."
                     stage == ProcessingStage.STITCHING ->
                         "The selected frames are aligned on the receipt plane and written as " +
                             "one continuous image."
@@ -627,17 +674,14 @@ private fun ProcessingReceiptScreen(state: ScanUiState) {
 
 @Composable
 private fun ScannerErrorScreen(
+    title: String,
     message: String,
-    retryLabel: String,
+    retryLabel: String?,
+    closeLabel: String,
     onRetry: () -> Unit,
     onClose: () -> Unit,
 ) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.surface),
-        contentAlignment = Alignment.Center,
-    ) {
+    ScannerBackdrop {
         Column(
             modifier = Modifier
                 .widthIn(max = 480.dp)
@@ -651,17 +695,19 @@ private fun ScannerErrorScreen(
                 tint = MaterialTheme.colorScheme.error,
                 modifier = Modifier.size(48.dp),
             )
-            Text("Scanner stopped", style = MaterialTheme.typography.headlineSmall)
+            Text(title, style = MaterialTheme.typography.headlineSmall)
             Text(
                 message,
                 textAlign = TextAlign.Center,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Button(onClick = onRetry, modifier = Modifier.fillMaxWidth()) {
-                Text(retryLabel)
+            retryLabel?.let { label ->
+                Button(onClick = onRetry, modifier = Modifier.fillMaxWidth()) {
+                    Text(label)
+                }
             }
             OutlinedButton(onClick = onClose, modifier = Modifier.fillMaxWidth()) {
-                Text("Discard recording")
+                Text(closeLabel)
             }
         }
     }
@@ -672,12 +718,7 @@ private fun CameraPermissionScreen(
     onRequestPermission: () -> Unit,
     onClose: () -> Unit,
 ) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.surface),
-        contentAlignment = Alignment.Center,
-    ) {
+    ScannerBackdrop {
         Column(
             modifier = Modifier
                 .widthIn(max = 480.dp)

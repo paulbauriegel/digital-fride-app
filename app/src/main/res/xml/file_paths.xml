@@ -1,13 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths xmlns:android="http://schemas.android.com/apk/res/android">
     <!--
-      Receipts live under groceries/households/<id>/receipts/ and files-path takes no wildcard, so
-      the shared parent has to be declared. Only preview JPEGs are ever turned into URIs, and each
-      grant is per-URI, so the wider declaration does not widen what actually leaves the app.
+      Receipts live under groceries/receipts/<id>/ — households keep their own inventory, but the
+      receipt tree was consolidated back to the shared one (see HouseholdStorageMigration
+      .consolidateReceipts). files-path takes no wildcard, so the shared parent has to be declared.
+      Only preview JPEGs are ever turned into URIs, and each grant is per-URI, so the wider
+      declaration does not widen what actually leaves the app.
     -->
     <files-path
         name="receipt_exports"
-        path="groceries/households/" />
+        path="groceries/receipts/" />
     <cache-path
         name="camera_capture"
         path="camera/" />

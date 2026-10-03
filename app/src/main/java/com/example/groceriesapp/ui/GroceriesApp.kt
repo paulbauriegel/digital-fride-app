@@ -51,24 +51,37 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.groceriesapp.data.GroceriesRepository
 import com.example.groceriesapp.data.InventoryItem
 import com.example.groceriesapp.data.BioCompanyRepository
+import com.example.groceriesapp.data.EdekaRepository
 import com.example.groceriesapp.data.ReweRepository
 import com.example.groceriesapp.data.household.HouseholdRepository
 import com.example.groceriesapp.data.household.Household
 import com.example.groceriesapp.data.taxonomy.StorageLocation
+import com.example.groceriesapp.data.recipes.CookEntry
 import com.example.groceriesapp.data.recipes.Recipe
+import com.example.groceriesapp.data.recipes.RecipeCollection
+import com.example.groceriesapp.data.recipes.RecipeGenerationResult
+import com.example.groceriesapp.data.recipes.RecipeReviewDraft
+import com.example.groceriesapp.data.recipes.RecentSource
+import com.example.groceriesapp.data.recipes.RecipeLibrary
+import com.example.groceriesapp.data.recipes.RecipeStats
 import com.example.groceriesapp.data.recipes.RecipeMatcher
 import com.example.groceriesapp.data.recipes.RecipeSource
 import com.example.groceriesapp.data.recipes.RecipesRepository
 import com.example.groceriesapp.feature.recipes.RecipeDetailScreen
 import com.example.groceriesapp.feature.recipes.RecipeEditorScreen
-import com.example.groceriesapp.feature.recipes.RecipesScreen
+import com.example.groceriesapp.feature.recipes.hub.RecipesHub
+import com.example.groceriesapp.feature.recipes.hub.RecipesHubActions
+import com.example.groceriesapp.feature.recipes.hub.rememberRecipesHubState
 import com.example.groceriesapp.feature.recipes.decodeOrientedBitmap
 import java.time.LocalDate
 import com.example.groceriesapp.data.network.OpenFoodFactsProduct
+import com.example.groceriesapp.data.network.EdekaAuthRequest
 import com.example.groceriesapp.data.network.ReweAuthRequest
 import com.example.groceriesapp.data.products.ProductLookupRepository
 import com.example.groceriesapp.data.products.ProductLookupState
 import com.example.groceriesapp.feature.biocompany.BioCompanyReceiptsScreen
+import com.example.groceriesapp.feature.edeka.EdekaLoginScreen
+import com.example.groceriesapp.feature.edeka.EdekaReceiptsScreen
 import com.example.groceriesapp.feature.rewe.ReweLoginScreen
 import com.example.groceriesapp.feature.rewe.ReweReceiptsScreen
 import kotlinx.coroutines.launch
@@ -78,15 +91,19 @@ import com.example.groceriesapp.feature.inventory.BarcodeScannerScreen
 import com.example.groceriesapp.feature.inventory.EditInventoryItemScreen
 import com.example.groceriesapp.feature.inventory.InventoryItemPrefill
 import com.example.groceriesapp.feature.inventory.InventoryScreen
+import com.example.groceriesapp.feature.inventory.ScannedProductDialog
 import com.example.groceriesapp.feature.more.SettingsScreen
 import com.example.groceriesapp.feature.overview.OverviewScreen
 import com.example.groceriesapp.feature.receipts.ImportItemsScreen
 import com.example.groceriesapp.feature.receipts.ReceiptDetailScreen
 import com.example.groceriesapp.feature.receipts.ReceiptsScreen
 import com.example.groceriesapp.feature.review.ReceiptViewerScreen
+import com.example.groceriesapp.feature.scanner.ReceiptPhotoSource
+import com.example.groceriesapp.feature.scanner.ScanSource
 import com.example.groceriesapp.feature.scanner.ScanViewModel
 import com.example.groceriesapp.feature.scanner.ScanViewModelFactory
 import com.example.groceriesapp.feature.scanner.ScannerScreen
+import com.example.groceriesapp.feature.scanner.writeReceiptPhotoFrame
 import com.example.groceriesapp.vision.editing.ReceiptImageEditor
 import com.example.groceriesapp.vision.ocr.OcrEngine
 import com.example.groceriesapp.vision.ocr.ReceiptOcrRerunner
@@ -95,6 +112,7 @@ import com.example.groceriesapp.vision.parsing.ItemExtractionEngine
 import com.example.groceriesapp.vision.parsing.receiptItemExtractor
 import java.io.File
 import java.util.UUID
+import kotlinx.coroutines.flow.StateFlow
 
 private enum class TopLevelDestination(
     val label: String,
@@ -114,6 +132,9 @@ fun GroceriesApp(
     recipesRepository: RecipesRepository,
     bioCompanyRepository: BioCompanyRepository,
     reweRepository: ReweRepository,
+    edekaRepository: EdekaRepository,
+    incomingEdekaLink: StateFlow<String?>,
+    onEdekaLinkConsumed: () -> Unit,
     productLookupRepository: ProductLookupRepository,
     widthSizeClass: WindowWidthSizeClass,
     userName: String?,
@@ -138,13 +159,20 @@ fun GroceriesApp(
     val consumptionEvents by repository.consumptionEvents.collectAsStateWithLifecycle()
     val bioCompanyAccount by bioCompanyRepository.account.collectAsStateWithLifecycle()
     val reweAccount by reweRepository.account.collectAsStateWithLifecycle()
+    val edekaAccount by edekaRepository.account.collectAsStateWithLifecycle()
+    val edekaLink by incomingEdekaLink.collectAsStateWithLifecycle()
     val userRecipes by recipesRepository.userRecipes.collectAsStateWithLifecycle()
     val generatedRecipes by recipesRepository.generatedRecipes.collectAsStateWithLifecycle()
     val favoriteRecipeIds by recipesRepository.favoriteIds.collectAsStateWithLifecycle()
     val aiRecipeState by recipesRepository.aiState.collectAsStateWithLifecycle()
-    val recipeImportDraft by recipesRepository.importDraft.collectAsStateWithLifecycle()
+    val recipeReviewDraft by recipesRepository.reviewDraft.collectAsStateWithLifecycle()
+    val recipeRecentSources by recipesRepository.recentSources.collectAsStateWithLifecycle()
+    val recipeGenerationHistory by recipesRepository.generationHistory.collectAsStateWithLifecycle()
+    val lastGenerationId by recipesRepository.lastGenerationId.collectAsStateWithLifecycle()
     val lastAiRecipeId by recipesRepository.lastAiRecipeId.collectAsStateWithLifecycle()
     val recipeImageVersion by recipesRepository.imageVersion.collectAsStateWithLifecycle()
+    val recipeCookLog by recipesRepository.cookLog.collectAsStateWithLifecycle()
+    val recipeCollections by recipesRepository.collections.collectAsStateWithLifecycle()
     var destination by rememberSaveable { mutableStateOf(TopLevelDestination.OVERVIEW) }
     // Overlays below (recipe detail, editor, settings, …) return early and drop the tab subtree.
     // Without this holder every `rememberSaveable` inside a tab — recipe filters, search text,
@@ -170,10 +198,15 @@ fun GroceriesApp(
     // Set the moment a barcode is read; the confirm dialog stays up until the item is saved or
     // dropped, whatever the lookup came back with.
     var scannedBarcode by rememberSaveable { mutableStateOf<String?>(null) }
+    // Where the scan came from, and so where its result goes: null is the add-an-item flow, an id
+    // is the item open in the editor, which offers the product's details as edits instead.
+    var barcodeScanTargetId by rememberSaveable { mutableStateOf<String?>(null) }
     val productLookup by productLookupRepository.state.collectAsStateWithLifecycle()
     var showBioCompanyImport by remember { mutableStateOf(false) }
     var showReweImport by remember { mutableStateOf(false) }
+    var showEdekaImport by remember { mutableStateOf(false) }
     var reweAuthRequest by remember { mutableStateOf<ReweAuthRequest?>(null) }
+    var edekaAuthRequest by remember { mutableStateOf<EdekaAuthRequest?>(null) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val expanded = widthSizeClass != WindowWidthSizeClass.Compact
@@ -184,11 +217,68 @@ fun GroceriesApp(
         receiptItemExtractor(context, itemExtractionEngine)
     }
 
+    androidx.compose.runtime.LaunchedEffect(edekaLink) {
+        if (edekaLink != null && edekaAuthRequest == null) {
+            edekaAuthRequest = edekaRepository.pendingAuthRequest()
+            if (edekaAuthRequest == null) {
+                edekaRepository.failLogin("The EDEKA sign-in session expired. Start again.")
+                onEdekaLinkConsumed()
+            }
+        }
+    }
+
     fun beginScan() {
         receiptDetailId = null
         importItemsReceiptId = null
         receiptViewerId = null
         scanKey = UUID.randomUUID().toString()
+    }
+
+    // A photographed receipt takes the same path as a recording, with the photo standing in for the
+    // keyframes. It is handed to the scan session the moment that session opens.
+    var pendingReceiptPhoto by remember { mutableStateOf<ReceiptPhotoSource?>(null) }
+    // Saved, not just remembered: the camera app can push this process out of memory while it is in
+    // front, and the capture would otherwise come back with nowhere to go.
+    var receiptCameraPath by rememberSaveable { mutableStateOf<String?>(null) }
+    // Which scan session is a photo import. Saved for the same reason: the session itself is
+    // recovered from disk after a rebuild, and it must not reopen as a live recording.
+    var photoScanKey by rememberSaveable { mutableStateOf<String?>(null) }
+
+    fun beginPhotoScan(photo: ReceiptPhotoSource) {
+        receiptDetailId = null
+        importItemsReceiptId = null
+        receiptViewerId = null
+        val key = UUID.randomUUID().toString()
+        pendingReceiptPhoto = photo
+        photoScanKey = key
+        scanKey = key
+    }
+
+    val receiptPhotoPickerLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickVisualMedia(),
+    ) { uri ->
+        // A cancelled picker returns null: nothing opens, and no empty scan session is left behind.
+        uri?.let { beginPhotoScan(ReceiptPhotoSource.Picked(it)) }
+    }
+    val receiptCameraLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.TakePicture(),
+    ) { success ->
+        val file = receiptCameraPath?.let(::File)
+        receiptCameraPath = null
+        if (success && file != null) {
+            beginPhotoScan(ReceiptPhotoSource.Captured(file))
+        } else {
+            file?.delete()
+        }
+    }
+
+    fun takeReceiptPhoto() {
+        val cameraDir = File(context.cacheDir, "camera").apply(File::mkdirs)
+        val file = File(cameraDir, "receipt_${UUID.randomUUID()}.jpg")
+        receiptCameraPath = file.absolutePath
+        receiptCameraLauncher.launch(
+            FileProvider.getUriForFile(context, "${context.packageName}.files", file),
+        )
     }
 
     // Key presence is a one-shot prefs read, not a flow, so it has to be re-read whenever it could
@@ -206,7 +296,8 @@ fun GroceriesApp(
     val recipeImportGalleryLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.PickVisualMedia(),
     ) { uri ->
-        uri?.let { decodeOrientedBitmap(context, it) }?.let(recipesRepository::importRecipePhoto)
+        uri?.let { decodeOrientedBitmap(context, it) }
+            ?.let { recipesRepository.scanRecipePhoto(it, ocrRecognizer) }
     }
     val recipeImportCameraLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.TakePicture(),
@@ -214,7 +305,7 @@ fun GroceriesApp(
         val file = recipeImportCameraFile
         recipeImportCameraFile = null
         if (success && file != null) {
-            decodeOrientedBitmap(file)?.let(recipesRepository::importRecipePhoto)
+            decodeOrientedBitmap(file)?.let { recipesRepository.scanRecipePhoto(it, ocrRecognizer) }
         }
         file?.delete()
     }
@@ -227,14 +318,14 @@ fun GroceriesApp(
         recipeImportCameraLauncher.launch(uri)
     }
 
-    // A finished photo import opens the editor prefilled; an adapted or requested recipe opens
-    // straight into its detail screen.
-    androidx.compose.runtime.LaunchedEffect(recipeImportDraft) {
-        if (recipeImportDraft != null) {
-            editorRecipeId = null
-            recipeEditorOpen = true
-        }
+    // Cook history predates the cook log on older installs: rebuild it once per household from
+    // the consumption events that "I cooked this" has always written.
+    androidx.compose.runtime.LaunchedEffect(activeHouseholdId, consumptionEvents) {
+        activeHouseholdId?.let { recipesRepository.backfillCookLog(it, consumptionEvents) }
     }
+
+    // A finished scan or link import is reviewed inside the Recipes hub; an adapted or requested
+    // recipe opens straight into its detail screen.
     androidx.compose.runtime.LaunchedEffect(lastAiRecipeId) {
         lastAiRecipeId?.let { id ->
             openRecipeId = id
@@ -248,12 +339,32 @@ fun GroceriesApp(
         DisposableEffect(scanOwner) {
             onDispose(scanOwner::clear)
         }
+        val scanSource = if (activeScanKey == photoScanKey) ScanSource.PHOTO else ScanSource.LIVE
         val scanViewModel: ScanViewModel = viewModel(
             viewModelStoreOwner = scanOwner,
             key = "receipt-scan-$activeScanKey",
-            factory = ScanViewModelFactory(repository, activeScanKey, ocrRecognizer, itemExtractor),
+            factory = ScanViewModelFactory(
+                repository = repository,
+                sessionId = activeScanKey,
+                ocrRecognizer = ocrRecognizer,
+                itemExtractor = itemExtractor,
+                source = scanSource,
+            ),
         )
         val scanState by scanViewModel.uiState.collectAsStateWithLifecycle()
+        androidx.compose.runtime.LaunchedEffect(activeScanKey) {
+            if (scanSource != ScanSource.PHOTO) return@LaunchedEffect
+            val photo = pendingReceiptPhoto
+            pendingReceiptPhoto = null
+            // A session whose frame is already written keeps going on its own; one whose photo did
+            // not survive a rebuild has to fail, rather than wait for an import that cannot arrive.
+            scanViewModel.importPhoto { frameFile ->
+                photo != null && writeReceiptPhotoFrame(context, photo, frameFile).also {
+                    // The session keeps its own copy of the frame, so the camera cache file is done.
+                    (photo as? ReceiptPhotoSource.Captured)?.file?.delete()
+                }
+            }
+        }
         ScannerScreen(
             state = scanState,
             viewModel = scanViewModel,
@@ -278,7 +389,10 @@ fun GroceriesApp(
                 scannedBarcode = code
                 productLookupRepository.lookup(code)
             },
-            onClose = { barcodeScanOpen = false },
+            onClose = {
+                barcodeScanOpen = false
+                barcodeScanTargetId = null
+            },
         )
         return
     }
@@ -290,6 +404,40 @@ fun GroceriesApp(
             onBack = { showBioCompanyImport = false },
             groceryRepository = repository,
             bioCompanyRepository = bioCompanyRepository,
+        )
+        return
+    }
+
+    val activeEdekaAuthRequest = edekaAuthRequest
+    if (activeEdekaAuthRequest != null) {
+        EdekaLoginScreen(
+            authRequest = activeEdekaAuthRequest,
+            incomingLink = edekaLink,
+            continuationUrl = edekaRepository::continuationUrl,
+            onLinkConsumed = onEdekaLinkConsumed,
+            onCancel = {
+                edekaAuthRequest = null
+                edekaRepository.cancelLogin()
+            },
+            onCallback = { callbackUrl ->
+                edekaAuthRequest = null
+                scope.launch { edekaRepository.completeLogin(callbackUrl) }
+            },
+            onError = { message ->
+                edekaAuthRequest = null
+                edekaRepository.failLogin(message)
+            },
+        )
+        return
+    }
+
+    if (showEdekaImport) {
+        val edekaEntries by edekaRepository.receipts.collectAsStateWithLifecycle()
+        EdekaReceiptsScreen(
+            entries = edekaEntries,
+            edekaRepository = edekaRepository,
+            groceryRepository = repository,
+            onBack = { showEdekaImport = false },
         )
         return
     }
@@ -429,6 +577,14 @@ fun GroceriesApp(
                 onRenameMerchant = { merchant ->
                     repository.saveReceipt(receipt.copy(merchant = merchant))
                 },
+                onEditSummary = { date, total ->
+                    repository.saveReceipt(
+                        receipt.copy(dateEpochMillis = date, totalCents = total),
+                    )
+                },
+                onUpdateItem = { repository.updateReceiptItem(receipt.id, it) },
+                onAddItem = { repository.addReceiptItem(receipt.id, it) },
+                onDeleteItem = { repository.deleteReceiptItem(receipt.id, it) },
                 merchantSuggestions = merchantSuggestions,
             )
             return
@@ -457,7 +613,19 @@ fun GroceriesApp(
                 onSetExpiryDate = { repository.setInventoryItemExpiryDate(editItem.id, it) },
                 onSetAmount = { repository.setInventoryItemAmount(editItem.id, it) },
                 onSetPackageSize = { repository.setInventoryItemPackageSize(editItem.id, it) },
+                onSetHidden = { repository.setInventoryItemHidden(editItem.id, it) },
                 onMarkOpened = { repository.markInventoryItemOpened(editItem.id) },
+                onScanBarcode = {
+                    barcodeScanTargetId = editItem.id
+                    barcodeScanOpen = true
+                },
+                // Follow the split-off carton: it is the one the user just opened and will want
+                // to set the amount on.
+                onOpenOne = {
+                    repository.openOneInventoryItem(editItem.id)?.let { opened ->
+                        editItemId = opened.id
+                    }
+                },
                 onRemove = { reason ->
                     repository.removeInventoryItem(editItem.id, reason)
                     editItemId = null
@@ -470,10 +638,73 @@ fun GroceriesApp(
                     editItemId = null
                 },
             )
+
+            // A scan started from this screen resolves on top of it, so the item stays visible
+            // behind the answer and nothing is applied until the user says which parts to take.
+            val editBarcode = scannedBarcode?.takeIf { barcodeScanTargetId == editItem.id }
+            if (editBarcode != null) {
+                val dismissScan = {
+                    scannedBarcode = null
+                    barcodeScanTargetId = null
+                    productLookupRepository.clear()
+                }
+                val lookup = productLookup
+                if (lookup is ProductLookupState.Loading) {
+                    BarcodeLookupProgressDialog(barcode = editBarcode, onCancel = dismissScan)
+                } else {
+                    ScannedProductDialog(
+                        item = editItem,
+                        barcode = editBarcode,
+                        product = (lookup as? ProductLookupState.Found)?.product,
+                        notice = when (lookup) {
+                            is ProductLookupState.NotFound ->
+                                "Open Food Facts does not know this barcode. Linking it still " +
+                                    "makes the next scan of this pack find this item."
+                            is ProductLookupState.Error -> lookup.message
+                            else -> null
+                        },
+                        onApply = { useName, usePackSize ->
+                            val product = (lookup as? ProductLookupState.Found)?.product
+                            repository.setInventoryItemBarcode(editItem.id, editBarcode)
+                            if (useName) {
+                                product?.name?.takeIf(String::isNotBlank)?.let {
+                                    repository.renameInventoryItem(editItem.id, it)
+                                }
+                            }
+                            if (usePackSize) {
+                                product?.quantity?.let { size ->
+                                    repository.setInventoryItemPackageSize(
+                                        editItem.id,
+                                        size,
+                                        product.unit,
+                                    )
+                                    // Nothing is converted when the unit changes, so a remaining
+                                    // "1 pc" would come out as 1 g of a 500 g pack. A pack that
+                                    // has only just learned its size starts out full instead.
+                                    val relabelled = product.unit != null &&
+                                        !product.unit.equals(editItem.unit, ignoreCase = true)
+                                    if (relabelled) {
+                                        repository.setInventoryItemAmount(editItem.id, size)
+                                    }
+                                }
+                            }
+                            dismissScan()
+                        },
+                        onDismiss = dismissScan,
+                    )
+                }
+            }
             return
         }
         androidx.compose.runtime.LaunchedEffect(activeEditItemId) {
             editItemId = null
+            // The editor's own scan cannot outlive the item it was started from; without this its
+            // result would sit in state and never be shown again.
+            if (barcodeScanTargetId == activeEditItemId) {
+                scannedBarcode = null
+                barcodeScanTargetId = null
+                productLookupRepository.clear()
+            }
         }
     }
 
@@ -495,6 +726,9 @@ fun GroceriesApp(
             reweRepo = reweRepository,
             onConnectRewe = { reweAuthRequest = reweRepository.createAuthRequest() },
             onOpenReweReceipts = { showReweImport = true },
+            edekaRepo = edekaRepository,
+            onConnectEdeka = { edekaAuthRequest = edekaRepository.createAuthRequest() },
+            onOpenEdekaReceipts = { showEdekaImport = true },
             onBack = { showSettings = false },
             // Deleting a household that is not the active one leaves this repository in place, so
             // it has to be told that the shared receipt index changed underneath it. Without this
@@ -509,22 +743,18 @@ fun GroceriesApp(
     if (recipeEditorOpen) {
         // Each overlay below returns early, so only its own BackHandler is ever registered.
         BackHandler {
-            recipesRepository.clearImportDraft()
             recipeEditorOpen = false
             editorRecipeId = null
         }
         RecipeEditorScreen(
-            initial = editorRecipeId?.let { id -> allRecipes.firstOrNull { it.id == id } }
-                ?: recipeImportDraft,
+            initial = editorRecipeId?.let { id -> allRecipes.firstOrNull { it.id == id } },
             onSave = { recipe ->
                 recipesRepository.saveUserRecipe(recipe)
-                recipesRepository.clearImportDraft()
                 recipeEditorOpen = false
                 editorRecipeId = null
                 openRecipeId = recipe.id
             },
             onBack = {
-                recipesRepository.clearImportDraft()
                 recipeEditorOpen = false
                 editorRecipeId = null
             },
@@ -548,9 +778,14 @@ fun GroceriesApp(
                     favoriteIds = favoriteRecipeIds,
                 )
             }
+            val recipeStats = remember(recipeCookLog, recipe.id) {
+                RecipeLibrary().statsFor(recipeCookLog)[recipe.id] ?: RecipeStats.NONE
+            }
             RecipeDetailScreen(
                 match = match,
                 favorite = recipe.id in favoriteRecipeIds,
+                stats = recipeStats,
+                nowEpochMillis = System.currentTimeMillis(),
                 imagesDir = recipesRepository.imagesDir,
                 imageVersion = recipeImageVersion,
                 aiEnabled = aiEnabled,
@@ -561,8 +796,14 @@ fun GroceriesApp(
                     openRecipeId = null
                 },
                 onToggleFavorite = { recipesRepository.toggleFavorite(recipe.id) },
-                onCooked = { consumptions ->
+                onCooked = { consumptions, rating ->
                     repository.consumeForRecipe(recipe.id, recipe.title, consumptions)
+                    recipesRepository.recordCooked(
+                        recipeId = recipe.id,
+                        recipeTitle = recipe.title,
+                        householdId = activeHouseholdId,
+                        rating = rating,
+                    )
                     openRecipeId = null
                 },
                 onPhotoPicked = { bitmap ->
@@ -595,6 +836,14 @@ fun GroceriesApp(
                 } else {
                     null
                 },
+                collections = recipeCollections,
+                onSetInCollection = { collectionId, included ->
+                    recipesRepository.setRecipeInCollection(collectionId, recipe.id, included)
+                },
+                onCreateCollection = { name ->
+                    val created = recipesRepository.createCollection(name)
+                    recipesRepository.setRecipeInCollection(created.id, recipe.id, included = true)
+                },
             )
             return
         }
@@ -622,9 +871,22 @@ fun GroceriesApp(
                 userName = userName,
                 bioCompanyConnected = bioCompanyAccount != null,
                 reweConnected = reweAccount != null,
+                edekaConnected = edekaAccount != null,
                 onImportRewe = { showReweImport = true },
-                onScan = ::beginScan,
-                onScanBarcode = { barcodeScanOpen = true },
+                onImportEdeka = { showEdekaImport = true },
+                onTakeReceiptPhoto = ::takeReceiptPhoto,
+                onPickReceiptPhoto = {
+                    receiptPhotoPickerLauncher.launch(
+                        androidx.activity.result.PickVisualMediaRequest(
+                            ActivityResultContracts.PickVisualMedia.ImageOnly,
+                        ),
+                    )
+                },
+                onScanLongReceipt = ::beginScan,
+                onScanBarcode = {
+                    barcodeScanTargetId = null
+                    barcodeScanOpen = true
+                },
                 onDestination = { destination = it },
                 onOpenInventoryAt = { location ->
                     inventoryLocationRequest = location
@@ -641,6 +903,13 @@ fun GroceriesApp(
                 userRecipes = userRecipes,
                 generatedRecipes = generatedRecipes,
                 favoriteRecipeIds = favoriteRecipeIds,
+                recipeCookLog = recipeCookLog,
+                recipeCollections = recipeCollections,
+                recipeReviewDraft = recipeReviewDraft,
+                recipeRecentSources = recipeRecentSources,
+                recipeGenerationHistory = recipeGenerationHistory,
+                lastGenerationId = lastGenerationId,
+                recipeScanSlow = ocrEngine != OcrEngine.ML_KIT,
                 recipeImageVersion = recipeImageVersion,
                 aiEnabled = aiEnabled,
                 aiBusy = aiBusy,
@@ -721,7 +990,7 @@ fun GroceriesApp(
 
     // A dialog rather than another early-return overlay: the scan can start from Home or from
     // Inventory, and confirming it should leave that tab where it was underneath.
-    val pendingBarcode = scannedBarcode
+    val pendingBarcode = scannedBarcode?.takeIf { barcodeScanTargetId == null }
     if (pendingBarcode != null) {
         val dismiss = {
             scannedBarcode = null
@@ -802,8 +1071,12 @@ private fun TopLevelContent(
     userName: String?,
     bioCompanyConnected: Boolean,
     reweConnected: Boolean,
+    edekaConnected: Boolean,
     onImportRewe: () -> Unit,
-    onScan: () -> Unit,
+    onImportEdeka: () -> Unit,
+    onTakeReceiptPhoto: () -> Unit,
+    onPickReceiptPhoto: () -> Unit,
+    onScanLongReceipt: () -> Unit,
     onScanBarcode: () -> Unit,
     onDestination: (TopLevelDestination) -> Unit,
     onOpenInventoryAt: (StorageLocation?) -> Unit,
@@ -818,6 +1091,13 @@ private fun TopLevelContent(
     userRecipes: List<Recipe>,
     generatedRecipes: List<Recipe>,
     favoriteRecipeIds: Set<String>,
+    recipeCookLog: List<CookEntry>,
+    recipeCollections: List<RecipeCollection>,
+    recipeReviewDraft: RecipeReviewDraft?,
+    recipeRecentSources: List<RecentSource>,
+    recipeGenerationHistory: List<RecipeGenerationResult>,
+    lastGenerationId: String?,
+    recipeScanSlow: Boolean,
     recipeImageVersion: Int,
     aiEnabled: Boolean,
     aiBusy: Boolean,
@@ -840,7 +1120,9 @@ private fun TopLevelContent(
                 favoriteRecipeIds = favoriteRecipeIds,
                 imagesDir = recipesRepository.imagesDir,
                 imageVersion = recipeImageVersion,
-                onScanReceipt = onScan,
+                onTakeReceiptPhoto = onTakeReceiptPhoto,
+                onPickReceiptPhoto = onPickReceiptPhoto,
+                onScanLongReceipt = onScanLongReceipt,
                 onAddItem = repository::addInventoryItem,
                 onScanBarcode = onScanBarcode,
                 onOpenInventory = onOpenInventoryAt,
@@ -866,37 +1148,60 @@ private fun TopLevelContent(
                 onOpenSettings = onOpenSettings,
                 modifier = Modifier.fillMaxSize(),
             )
-            TopLevelDestination.RECIPES -> RecipesScreen(
+            TopLevelDestination.RECIPES -> RecipesHub(
+                state = rememberRecipesHubState(),
                 inventory = inventory,
-                curatedRecipes = recipesRepository.curatedRecipes,
-                userRecipes = userRecipes,
-                generatedRecipes = generatedRecipes,
+                recipes = userRecipes + generatedRecipes + recipesRepository.curatedRecipes,
                 favoriteIds = favoriteRecipeIds,
+                cookLog = recipeCookLog,
+                collections = recipeCollections,
+                reviewDraft = recipeReviewDraft,
+                recentSources = recipeRecentSources,
+                generationHistory = recipeGenerationHistory,
+                lastGenerationId = lastGenerationId,
                 imagesDir = recipesRepository.imagesDir,
+                imageVersion = recipeImageVersion,
                 aiEnabled = aiEnabled,
                 aiBusy = aiBusy,
                 aiError = aiError,
-                onOpenRecipe = onOpenRecipe,
-                onToggleFavorite = recipesRepository::toggleFavorite,
-                onWriteRecipe = onWriteRecipe,
-                onScanRecipeCamera = onScanRecipeCamera,
-                onScanRecipeGallery = onScanRecipeGallery,
-                onImportRecipeUrl = onImportRecipeUrl,
-                onGenerateIdeas = { recipesRepository.generateIdeas(inventory) },
-                onGenerateRecipe = { request, photo ->
-                    recipesRepository.generateRecipeFromRequest(request, photo, inventory)
-                },
-                onOpenSettings = onOpenSettings,
+                slowOcrEngine = recipeScanSlow,
+                actions = RecipesHubActions(
+                    onOpenRecipe = onOpenRecipe,
+                    onToggleFavorite = recipesRepository::toggleFavorite,
+                    onWriteRecipe = onWriteRecipe,
+                    onScanRecipeCamera = onScanRecipeCamera,
+                    onScanRecipeGallery = onScanRecipeGallery,
+                    onImportRecipeUrl = onImportRecipeUrl,
+                    onGenerateIdeas = { recipesRepository.generateIdeas(inventory) },
+                    onGenerateRecipe = { request, photo ->
+                        recipesRepository.generateRecipeFromRequest(request, photo, inventory)
+                    },
+                    onGenerateRecipes = { request -> recipesRepository.generateRecipes(request, inventory) },
+                    onClearLastGenerationId = recipesRepository::clearLastGenerationId,
+                    onSaveReviewDraft = { recipe ->
+                        val saved = recipesRepository.saveReviewedRecipe(recipe)
+                        onOpenRecipe(saved.id)
+                    },
+                    onDiscardReviewDraft = recipesRepository::discardReviewDraft,
+                    onCreateCollection = { recipesRepository.createCollection(it) },
+                    onRenameCollection = recipesRepository::renameCollection,
+                    onDeleteCollection = recipesRepository::deleteCollection,
+                    onOpenSettings = onOpenSettings,
+                ),
                 modifier = Modifier.fillMaxSize(),
             )
             TopLevelDestination.RECEIPTS -> ReceiptsScreen(
                 receipts = receipts,
                 bioCompanyConnected = bioCompanyConnected,
                 reweConnected = reweConnected,
-                onScanReceipt = onScan,
+                edekaConnected = edekaConnected,
+                onTakeReceiptPhoto = onTakeReceiptPhoto,
+                onPickReceiptPhoto = onPickReceiptPhoto,
+                onScanLongReceipt = onScanLongReceipt,
                 onOpenReceipt = onOpenReceipt,
                 onImportBioCompany = onOpenBioCompanyReceipts,
                 onImportRewe = onImportRewe,
+                onImportEdeka = onImportEdeka,
                 onOpenStoreSettings = onOpenSettings,
                 modifier = Modifier.fillMaxSize(),
             )

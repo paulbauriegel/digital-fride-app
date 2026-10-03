@@ -7,6 +7,7 @@ import kotlin.math.hypot
 import kotlin.math.ln
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.roundToInt
 import org.opencv.calib3d.Calib3d
 import org.opencv.core.Core
 import org.opencv.core.CvType
@@ -102,6 +103,7 @@ class OpenCvReceiptBoundaryModel(
         val blurred = Mat()
         val binary = Mat()
         val edges = Mat()
+        val paper = Mat()
         val hierarchy = Mat()
         val kernel = Imgproc.getStructuringElement(
             Imgproc.MORPH_RECT,
@@ -139,6 +141,39 @@ class OpenCvReceiptBoundaryModel(
                 Imgproc.CHAIN_APPROX_SIMPLE,
             )
             contours += edgeContours
+
+            // Local contrast alone cannot separate paper from a busy, speckled background (carpet,
+            // wood grain) or from a hand holding the receipt: the adaptive mask above merges them
+            // into one blob whose outline runs through the paper. Paper is nonetheless the
+            // brightest large surface in nearly every receipt photo, so a global threshold gives a
+            // second, independent paper mask. Opening detaches fingers and stray speckles from it;
+            // closing fills the printed text back in so one contour covers the whole sheet.
+            Imgproc.threshold(
+                blurred,
+                paper,
+                0.0,
+                255.0,
+                Imgproc.THRESH_BINARY or Imgproc.THRESH_OTSU,
+            )
+            val kernelUnit = max(working.cols(), working.rows()) / 960.0
+            val openKernel = ellipseKernel(15.0 * kernelUnit)
+            val closeKernel = ellipseKernel(31.0 * kernelUnit)
+            try {
+                Imgproc.morphologyEx(paper, paper, Imgproc.MORPH_OPEN, openKernel)
+                Imgproc.morphologyEx(paper, paper, Imgproc.MORPH_CLOSE, closeKernel)
+            } finally {
+                openKernel.release()
+                closeKernel.release()
+            }
+            val paperContours = mutableListOf<MatOfPoint>()
+            Imgproc.findContours(
+                paper,
+                paperContours,
+                hierarchy,
+                Imgproc.RETR_EXTERNAL,
+                Imgproc.CHAIN_APPROX_SIMPLE,
+            )
+            contours += paperContours
 
             val imageArea = working.cols().toDouble() * working.rows()
             val imageMean = Core.mean(working).`val`[0]
@@ -179,9 +214,19 @@ class OpenCvReceiptBoundaryModel(
             blurred.release()
             binary.release()
             edges.release()
+            paper.release()
             hierarchy.release()
             kernel.release()
         }
+    }
+
+    /** An odd-sized elliptical structuring element of at least 3 pixels. */
+    private fun ellipseKernel(size: Double): Mat {
+        val side = max(3, size.roundToInt() or 1)
+        return Imgproc.getStructuringElement(
+            Imgproc.MORPH_ELLIPSE,
+            Size(side.toDouble(), side.toDouble()),
+        )
     }
 
     private fun candidateFor(

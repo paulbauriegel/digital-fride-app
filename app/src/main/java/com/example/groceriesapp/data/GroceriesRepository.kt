@@ -348,13 +348,16 @@ class GroceriesRepository(
      * pre-merge data heals itself; new imports already arrive merged.
      */
     private fun mergeDuplicateInventoryItems(items: List<InventoryItem>): List<InventoryItem> {
-        fun keyOf(item: InventoryItem) = Triple(
+        fun keyOf(item: InventoryItem) = listOf(
             item.receiptId,
             mergeKeyOf(item.name, item.unit),
             java.time.Instant
                 .ofEpochMilli(item.purchasedAtEpochMillis ?: item.addedAtEpochMillis)
                 .atZone(java.time.ZoneId.systemDefault())
                 .toLocalDate(),
+            // A row [openOneInventoryItem] split off differs from its siblings only in this stamp;
+            // without it in the key the deliberate split would heal back into one row here.
+            item.openedAtEpochMillis,
         )
 
         val groups = items.groupBy(::keyOf)
@@ -472,6 +475,46 @@ class GroceriesRepository(
             persistInventory(updated)
             _inventory.value = updated
             return reestimated
+        }
+    }
+
+    /**
+     * Opens one piece of a multi-piece countable row ("3 pc" of plant drink) without opening the
+     * rest: one piece is split off into its own row, marked opened with a re-estimated window, and
+     * set up to track how much of it is left. The remaining pieces stay sealed on the original row
+     * with their unopened expiry. Falls back to [markInventoryItemOpened] when there is nothing to
+     * split — a single piece, or an amount that isn't a piece count. Returns the opened row.
+     */
+    fun openOneInventoryItem(id: String): InventoryItem? {
+        synchronized(lock) {
+            val current = _inventory.value
+            val existing = current.firstOrNull { it.id == id } ?: return null
+            if (!existing.isCountable || existing.quantity < 2.0) {
+                return markInventoryItemOpened(id)
+            }
+
+            // Integer division: the remainder row keeps the leftover cents, so the two rows still
+            // sum to what was actually paid.
+            val perPieceCents = existing.priceCents?.div(existing.quantity.toInt())
+            val opened = existing.copy(
+                id = UUID.randomUUID().toString(),
+                quantity = 1.0,
+                packageSize = 1.0,
+                priceCents = perPieceCents,
+                openedAtEpochMillis = System.currentTimeMillis(),
+            ).reestimatedExpiry()
+            val remainder = existing.copy(
+                quantity = existing.quantity - 1.0,
+                packageSize = existing.packageSize?.let { (it - 1.0).takeIf { size -> size > 0.0 } },
+                priceCents = existing.priceCents?.let { it - (perPieceCents ?: 0) },
+            )
+
+            val updated = current.flatMap {
+                if (it.id == id) listOf(remainder, opened) else listOf(it)
+            }
+            persistInventory(updated)
+            _inventory.value = updated
+            return opened
         }
     }
 
@@ -751,6 +794,52 @@ class GroceriesRepository(
     }
 
     /**
+     * Teaches a row that was typed in or imported from a receipt which pack it is, so the next
+     * scan of the same barcode stacks onto it instead of starting a second row — the same link
+     * [addInventoryItem] makes on its own when a scan happens to land on an existing name.
+     *
+     * Only the code is stored here. What Open Food Facts knows about that code reaches the item
+     * through the ordinary field mutators, one per thing the user chose to accept, so a scan can
+     * never rewrite a name or a pack size behind their back.
+     */
+    fun setInventoryItemBarcode(id: String, barcode: String): InventoryItem? {
+        val trimmed = barcode.trim()
+        require(trimmed.isNotBlank()) { "Barcode must not be blank." }
+        synchronized(lock) {
+            val current = _inventory.value
+            val existing = current.firstOrNull { it.id == id } ?: return null
+            if (existing.barcode == trimmed) return existing
+
+            val changed = existing.copy(barcode = trimmed)
+            val updated = current.map { if (it.id == id) changed else it }
+            persistInventory(updated)
+            _inventory.value = updated
+            return changed
+        }
+    }
+
+    /**
+     * Moves a row into (or out of) the inventory list's collapsed "Hidden" section.
+     *
+     * Nothing but where it is drawn changes: the item keeps its expiry, its amount, and its place
+     * in every count and insight. So there is deliberately no consumption event and no undo
+     * snackbar — the way back is the same switch.
+     */
+    fun setInventoryItemHidden(id: String, hidden: Boolean): InventoryItem? {
+        synchronized(lock) {
+            val current = _inventory.value
+            val existing = current.firstOrNull { it.id == id } ?: return null
+            if (existing.hidden == hidden) return existing
+
+            val changed = existing.copy(hidden = hidden)
+            val updated = current.map { if (it.id == id) changed else it }
+            persistInventory(updated)
+            _inventory.value = updated
+            return changed
+        }
+    }
+
+    /**
      * The receipt line this row most likely came from, for rows that carry a receipt but no line
      * id (older imports, and the non-primary members of a merged group). Resolved by the *current*
      * name, so it must be called before a rename rewrites it.
@@ -982,6 +1071,62 @@ class GroceriesRepository(
             persistReceipts(updated)
             _receipts.value = updated
             deleteDirectoryWithoutFollowingLinks(receiptDirectory(id))
+            return true
+        }
+    }
+
+    /**
+     * Replaces one receipt line. The id travels with it, so an import record already attached to
+     * the line — and any inventory row pointing back at it — stays attached across the edit.
+     *
+     * Re-normalized on the way in rather than left for the next launch's normalize pass, so
+     * correcting a mangled OCR name re-derives the category and icon while the user is looking
+     * at it.
+     */
+    fun updateReceiptItem(receiptId: String, item: ReceiptItem): Boolean {
+        synchronized(lock) {
+            val receipt = _receipts.value.firstOrNull { it.id == receiptId } ?: return false
+            if (receipt.items.none { it.id == item.id }) return false
+
+            val normalized = normalizeReceiptItem(item)
+            saveReceipt(
+                receipt.copy(
+                    items = receipt.items.map { if (it.id == normalized.id) normalized else it },
+                ),
+            )
+            return true
+        }
+    }
+
+    /** Appends a line the scan missed. Receipt totals are the store's figure and are left alone. */
+    fun addReceiptItem(receiptId: String, item: ReceiptItem): Boolean {
+        synchronized(lock) {
+            val receipt = _receipts.value.firstOrNull { it.id == receiptId } ?: return false
+
+            saveReceipt(receipt.copy(items = receipt.items + normalizeReceiptItem(item)))
+            return true
+        }
+    }
+
+    /**
+     * Drops one receipt line along with its import record. The record exists only to stop the line
+     * being imported twice; with the line gone there is nothing left to block, and keeping it would
+     * leave the imported/not-imported split counting a line that is no longer on the receipt.
+     *
+     * Inventory already imported from the line stays where it is — the goods were bought either
+     * way, and a scan artefact on the receipt is not a reason to throw a shelf row away.
+     */
+    fun deleteReceiptItem(receiptId: String, itemId: String): Boolean {
+        synchronized(lock) {
+            val receipt = _receipts.value.firstOrNull { it.id == receiptId } ?: return false
+            if (receipt.items.none { it.id == itemId }) return false
+
+            saveReceipt(
+                receipt.copy(
+                    items = receipt.items.filterNot { it.id == itemId },
+                    imports = receipt.imports.filterNot { it.receiptItemId == itemId },
+                ),
+            )
             return true
         }
     }
@@ -1394,8 +1539,44 @@ class GroceriesRepository(
         return receipt
     }
 
+    fun importEdekaReceipt(
+        merchant: String?,
+        dateIso: String,
+        totalCents: Int?,
+        currency: String,
+        rawText: String,
+        items: List<ReceiptItem>,
+        edekaReceiptId: Int,
+    ): DigitalReceipt {
+        val receipt = DigitalReceipt(
+            merchant = merchant?.takeIf(String::isNotBlank) ?: "EDEKA",
+            dateEpochMillis = parseInstantToEpochMillis(dateIso),
+            totalCents = totalCents,
+            currency = currency.takeIf(String::isNotBlank) ?: "EUR",
+            rawText = rawText,
+            items = items,
+            status = ReceiptStatus.READY,
+            createdAtEpochMillis = System.currentTimeMillis(),
+            source = ReceiptSource.EDEKA,
+            edekaReceiptId = edekaReceiptId,
+        )
+        synchronized(lock) {
+            _receipts.value.firstOrNull { it.edekaReceiptId == edekaReceiptId }?.let { return it }
+            val updated = _receipts.value
+                .plus(receipt)
+                .sortedByDescending(DigitalReceipt::sortEpochMillis)
+            persistReceipts(updated)
+            _receipts.value = updated
+        }
+        return receipt
+    }
+
     fun hasReweReceipt(reweReceiptId: String): Boolean = synchronized(lock) {
         _receipts.value.any { it.reweReceiptId == reweReceiptId }
+    }
+
+    fun hasEdekaReceipt(edekaReceiptId: Int): Boolean = synchronized(lock) {
+        _receipts.value.any { it.edekaReceiptId == edekaReceiptId }
     }
 
     fun hasBioCompanyReceipt(receiptNumber: Int?, checkout: Int?): Boolean {
@@ -1747,6 +1928,7 @@ private fun DigitalReceipt.toJson(storePath: (String) -> String): JSONObject = J
     .putNullable("bioCompanyReceiptNumber", bioCompanyReceiptNumber)
     .putNullable("bioCompanyCheckout", bioCompanyCheckout)
     .putNullable("reweReceiptId", reweReceiptId)
+    .putNullable("edekaReceiptId", edekaReceiptId)
     .put("imports", imports.toJsonArray(ReceiptItemImport::toJson))
     // Schema-6 mirror, deliberately still written — see the SCHEMA_VERSION note.
     .put("importedItemIds", imports.map(ReceiptItemImport::receiptItemId).toStringJsonArray())
@@ -1809,6 +1991,7 @@ internal fun InventoryItem.toJson(): JSONObject = JSONObject()
     .putNullable("receiptId", receiptId)
     .putNullable("receiptItemId", receiptItemId)
     .putNullable("barcode", barcode)
+    .put("hidden", hidden)
     .put("addedAtEpochMillis", addedAtEpochMillis)
 
 private fun JSONObject.toDigitalReceipt(resolvePath: (String) -> String): DigitalReceipt = DigitalReceipt(
@@ -1834,6 +2017,7 @@ private fun JSONObject.toDigitalReceipt(resolvePath: (String) -> String): Digita
     bioCompanyReceiptNumber = nullableInt("bioCompanyReceiptNumber"),
     bioCompanyCheckout = nullableInt("bioCompanyCheckout"),
     reweReceiptId = nullableString("reweReceiptId"),
+    edekaReceiptId = nullableInt("edekaReceiptId"),
     imports = readImports(
         records = optJSONArray("imports"),
         legacyIds = optJSONArray("importedItemIds").toStringList(),
@@ -1998,6 +2182,7 @@ private fun JSONObject.toInventoryItem(
     receiptId = nullableString("receiptId"),
     receiptItemId = nullableString("receiptItemId"),
     barcode = nullableString("barcode"),
+    hidden = optBoolean("hidden", false),
     addedAtEpochMillis = optLong("addedAtEpochMillis", 0L),
 )
 

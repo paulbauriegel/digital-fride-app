@@ -1,5 +1,6 @@
 package com.example.groceriesapp.feature.inventory
 
+import android.content.Context
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -16,6 +17,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
@@ -29,6 +31,8 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -70,6 +74,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -79,6 +84,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.draw.clip
+import androidx.core.content.edit
 import com.example.groceriesapp.data.ConsumptionReason
 import com.example.groceriesapp.data.InventoryItem
 import com.example.groceriesapp.data.taxonomy.FoodConceptCatalog
@@ -101,6 +107,15 @@ import com.example.groceriesapp.ui.theme.spacing
 import com.example.groceriesapp.ui.theme.storageLocationColors
 import com.example.groceriesapp.ui.color
 import kotlinx.coroutines.launch
+
+/**
+ * Whether the "Hidden" section is open, remembered across launches.
+ *
+ * Read straight from the same `appearance` store MainActivity uses rather than hoisted into it:
+ * every pref there is a *setting*, surfaced in SettingsScreen and read by several screens, while
+ * this is a disclosure triangle nothing outside this list cares about.
+ */
+private const val HIDDEN_SECTION_EXPANDED_KEY = "inventory_hidden_expanded"
 
 private enum class InventorySortOrder(val label: String) {
     RECENTLY_ADDED("Recently added"),
@@ -138,6 +153,14 @@ fun InventoryScreen(
     var showAddDialog by rememberSaveable { mutableStateOf(false) }
     var removeItemId by rememberSaveable { mutableStateOf<String?>(null) }
 
+    val context = LocalContext.current
+    val preferences = remember(context) {
+        context.getSharedPreferences("appearance", Context.MODE_PRIVATE)
+    }
+    var hiddenExpanded by remember {
+        mutableStateOf(preferences.getBoolean(HIDDEN_SECTION_EXPANDED_KEY, false))
+    }
+
     // Home's inventory-summary cards land here pre-filtered to one location.
     LaunchedEffect(locationRequest) {
         if (locationRequest != null) {
@@ -159,6 +182,12 @@ fun InventoryScreen(
                 compareBy<InventoryItem, Long?>(nullsLast()) { it.expiresAtEpochMillis },
             )
         }
+    }
+
+    // Hidden rows stay inside `filtered` — so the count above still reflects the filters and the
+    // search below still finds a hidden spice — and only the list draws them apart.
+    val (hiddenItems, visibleItems) = remember(filtered) {
+        filtered.partition(InventoryItem::hidden)
     }
 
     val searchQuery = searchState.query
@@ -342,7 +371,8 @@ fun InventoryScreen(
                             horizontalArrangement = Arrangement.SpaceBetween,
                         ) {
                             Text(
-                                "${filtered.size} ${if (filtered.size == 1) "item" else "items"}",
+                                "${visibleItems.size} " +
+                                    if (visibleItems.size == 1) "item" else "items",
                                 style = MaterialTheme.typography.labelLarge,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -378,7 +408,7 @@ fun InventoryScreen(
                             }
                         }
                     }
-                    items(filtered, key = InventoryItem::id) { item ->
+                    items(visibleItems, key = InventoryItem::id) { item ->
                         SwipeableInventoryRow(
                             item = item,
                             onClick = { onEditItem(item.id) },
@@ -388,6 +418,38 @@ fun InventoryScreen(
                             onUsedUp = { removeWithUndo(item, ConsumptionReason.USED_UP) },
                             onThrownAway = { removeWithUndo(item, ConsumptionReason.THROWN_AWAY) },
                         )
+                    }
+                    if (hiddenItems.isNotEmpty()) {
+                        item(key = "hidden-header") {
+                            HiddenSectionHeader(
+                                count = hiddenItems.size,
+                                expanded = hiddenExpanded,
+                                onToggle = {
+                                    hiddenExpanded = !hiddenExpanded
+                                    preferences.edit {
+                                        putBoolean(HIDDEN_SECTION_EXPANDED_KEY, hiddenExpanded)
+                                    }
+                                },
+                            )
+                        }
+                        // An `if` around the items rather than AnimatedVisibility: a lazy list's
+                        // items cannot be wrapped in one, and the chevron already says which way
+                        // the section is facing.
+                        if (hiddenExpanded) {
+                            items(hiddenItems, key = InventoryItem::id) { item ->
+                                SwipeableInventoryRow(
+                                    item = item,
+                                    onClick = { onEditItem(item.id) },
+                                    onIncrement = { onAdjustQuantity(item.id, 1.0) },
+                                    onDecrement = { onAdjustQuantity(item.id, -1.0) },
+                                    onDelete = { removeItemId = item.id },
+                                    onUsedUp = { removeWithUndo(item, ConsumptionReason.USED_UP) },
+                                    onThrownAway = {
+                                        removeWithUndo(item, ConsumptionReason.THROWN_AWAY)
+                                    },
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -502,6 +564,39 @@ private fun LocationHeaderCard(
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+    }
+}
+
+/**
+ * The divider between the rows that want attention and the ones the user has parked. Deliberately
+ * plain — a label and a chevron, no card — so it reads as the end of the list rather than as
+ * another item in it.
+ */
+@Composable
+private fun HiddenSectionHeader(count: Int, expanded: Boolean, onToggle: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(onClick = onToggle)
+            .padding(
+                horizontal = MaterialTheme.spacing.small,
+                vertical = MaterialTheme.spacing.extraSmall,
+            ),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text(
+            text = "Hidden ($count)",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Icon(
+            imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+            contentDescription = if (expanded) "Collapse hidden items" else "Show hidden items",
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(20.dp),
+        )
     }
 }
 

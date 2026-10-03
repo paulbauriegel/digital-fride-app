@@ -6,6 +6,7 @@ enum class ReceiptSource {
     CAPTURED,
     BIO_COMPANY,
     REWE,
+    EDEKA,
 }
 
 enum class ReceiptStatus {
@@ -146,6 +147,7 @@ data class DigitalReceipt(
     val bioCompanyReceiptNumber: Int? = null,
     val bioCompanyCheckout: Int? = null,
     val reweReceiptId: String? = null,
+    val edekaReceiptId: Int? = null,
     /**
      * Import provenance, one record per [ReceiptItem] that has been added to some household's
      * inventory. Persisted on the receipt — which is shared device-wide, unlike inventory — so the
@@ -246,6 +248,15 @@ data class InventoryItem(
      * here would delete a real inventory row over a field nothing depends on.
      */
     val barcode: String? = null,
+    /**
+     * Tucked into the inventory list's collapsed "Hidden" section instead of sitting among the
+     * ordinary rows — for the spices and staples that are always there and never need attention.
+     *
+     * Display only. A hidden item still counts towards the household's stock, still turns up in
+     * search, and still has an expiry: hiding is about what the list leads with, not about the
+     * item mattering less.
+     */
+    val hidden: Boolean = false,
     val addedAtEpochMillis: Long = System.currentTimeMillis(),
     val id: String = UUID.randomUUID().toString(),
 ) {

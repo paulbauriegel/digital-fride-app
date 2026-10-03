@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.PhotoLibrary
@@ -59,10 +60,15 @@ import com.example.groceriesapp.data.recipes.CookConsumption
 import com.example.groceriesapp.data.recipes.IngredientMatch
 import com.example.groceriesapp.data.recipes.IngredientStatus
 import com.example.groceriesapp.data.recipes.RecipeMatch
+import com.example.groceriesapp.data.recipes.RecipeCollection
 import com.example.groceriesapp.data.recipes.RecipeQaTurn
 import com.example.groceriesapp.data.recipes.RecipeSource
+import com.example.groceriesapp.data.recipes.RecipeStats
+import com.example.groceriesapp.data.recipes.formatRelativeDays
 import com.example.groceriesapp.data.taxonomy.resolveIconRes
+import com.example.groceriesapp.feature.recipes.hub.AddToCollectionSheet
 import com.example.groceriesapp.ui.components.SectionHeader
+import com.example.groceriesapp.ui.components.StarRating
 import com.example.groceriesapp.ui.expiryUrgency
 import com.example.groceriesapp.ui.formatQuantity
 import com.example.groceriesapp.ui.theme.spacing
@@ -74,6 +80,8 @@ import java.util.UUID
 fun RecipeDetailScreen(
     match: RecipeMatch,
     favorite: Boolean,
+    stats: RecipeStats,
+    nowEpochMillis: Long,
     imagesDir: File,
     imageVersion: Int,
     aiEnabled: Boolean,
@@ -81,13 +89,16 @@ fun RecipeDetailScreen(
     aiError: String?,
     onBack: () -> Unit,
     onToggleFavorite: () -> Unit,
-    onCooked: (List<CookConsumption>) -> Unit,
+    onCooked: (consumptions: List<CookConsumption>, rating: Int?) -> Unit,
     onPhotoPicked: (Bitmap) -> Unit,
     onEdit: (() -> Unit)?,
     onDelete: (() -> Unit)?,
     onAdaptToInventory: (() -> Unit)?,
     onGeneratePhoto: (() -> Unit)?,
     onAskQuestion: (suspend (question: String, history: List<RecipeQaTurn>) -> String)?,
+    collections: List<RecipeCollection>,
+    onSetInCollection: (collectionId: String, included: Boolean) -> Unit,
+    onCreateCollection: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val recipe = match.recipe
@@ -96,6 +107,7 @@ fun RecipeDetailScreen(
     var confirmDelete by remember { mutableStateOf(false) }
     var showCookSheet by remember { mutableStateOf(false) }
     var showQaSheet by remember { mutableStateOf(false) }
+    var showCollectionSheet by remember { mutableStateOf(false) }
     var pendingCameraFile by remember { mutableStateOf<File?>(null) }
 
     val pickImageLauncher = rememberLauncherForActivityResult(
@@ -156,6 +168,17 @@ fun RecipeDetailScreen(
                         Icon(Icons.Default.MoreVert, contentDescription = "More options")
                     }
                     DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                        DropdownMenuItem(
+                            text = {
+                                val count = collections.count { recipe.id in it.recipeIds }
+                                Text(if (count == 0) "Add to collection" else "Collections ($count)")
+                            },
+                            leadingIcon = { Icon(Icons.Default.Folder, contentDescription = null) },
+                            onClick = {
+                                menuOpen = false
+                                showCollectionSheet = true
+                            },
+                        )
                         DropdownMenuItem(
                             text = { Text("Take photo") },
                             leadingIcon = {
@@ -261,6 +284,25 @@ fun RecipeDetailScreen(
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                if (stats.timesCooked > 0) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small),
+                    ) {
+                        StarRating(rating = stats.averageRating)
+                        Text(
+                            text = buildString {
+                                append(if (stats.timesCooked == 1) "Cooked once" else "Cooked ${stats.timesCooked}×")
+                                stats.lastCookedAtEpochMillis?.let { last ->
+                                    append(" · ")
+                                    append(formatRelativeDays(last, nowEpochMillis).replaceFirstChar(Char::lowercase))
+                                }
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
             }
 
             if (aiBusy) {
@@ -358,6 +400,16 @@ fun RecipeDetailScreen(
         }
     }
 
+    if (showCollectionSheet) {
+        AddToCollectionSheet(
+            recipeId = recipe.id,
+            collections = collections,
+            onSetInCollection = onSetInCollection,
+            onCreateCollection = onCreateCollection,
+            onDismiss = { showCollectionSheet = false },
+        )
+    }
+
     if (showQaSheet && onAskQuestion != null) {
         RecipeQaSheet(
             recipeTitle = recipe.title,
@@ -370,9 +422,9 @@ fun RecipeDetailScreen(
         CookRecipeSheet(
             match = match,
             onDismiss = { showCookSheet = false },
-            onConfirm = { consumptions ->
+            onConfirm = { consumptions, rating ->
                 showCookSheet = false
-                onCooked(consumptions)
+                onCooked(consumptions, rating)
             },
         )
     }

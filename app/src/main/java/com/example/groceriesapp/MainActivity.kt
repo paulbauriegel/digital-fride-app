@@ -1,5 +1,6 @@
 package com.example.groceriesapp
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -16,6 +17,7 @@ import androidx.core.view.WindowCompat
 import androidx.core.content.edit
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.groceriesapp.data.BioCompanyRepository
+import com.example.groceriesapp.data.EdekaRepository
 import com.example.groceriesapp.data.GroceriesRepository
 import com.example.groceriesapp.data.ReweRepository
 import com.example.groceriesapp.data.products.ProductLookupRepository
@@ -30,8 +32,11 @@ import com.example.groceriesapp.vision.ocr.GlmOcrLiteRtModelManager
 import com.example.groceriesapp.vision.ocr.OcrEngine
 import com.example.groceriesapp.vision.parsing.GraniteModelManager
 import com.example.groceriesapp.vision.parsing.ItemExtractionEngine
+import kotlinx.coroutines.flow.MutableStateFlow
 
 class MainActivity : ComponentActivity() {
+    private val incomingEdekaLink = MutableStateFlow<String?>(null)
+
     @OptIn(ExperimentalMaterial3WindowSizeClassApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -45,6 +50,8 @@ class MainActivity : ComponentActivity() {
         val recipesRepository = RecipesRepository(applicationContext)
         val bioCompanyRepository = BioCompanyRepository(applicationContext)
         val reweRepository = ReweRepository(applicationContext)
+        val edekaRepository = EdekaRepository(applicationContext)
+        captureEdekaLink(intent)
         // Household-independent: a barcode means the same product whichever household is active.
         val productLookupRepository = ProductLookupRepository()
         val preferences = getSharedPreferences("appearance", MODE_PRIVATE)
@@ -116,6 +123,9 @@ class MainActivity : ComponentActivity() {
                         recipesRepository = recipesRepository,
                         bioCompanyRepository = bioCompanyRepository,
                         reweRepository = reweRepository,
+                        edekaRepository = edekaRepository,
+                        incomingEdekaLink = incomingEdekaLink,
+                        onEdekaLinkConsumed = { incomingEdekaLink.value = null },
                         productLookupRepository = productLookupRepository,
                         widthSizeClass = calculateWindowSizeClass(this).widthSizeClass,
                         userName = userName,
@@ -144,6 +154,22 @@ class MainActivity : ComponentActivity() {
                     )
                 }
             }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        captureEdekaLink(intent)
+    }
+
+    private fun captureEdekaLink(intent: Intent?) {
+        if (intent?.action != Intent.ACTION_VIEW) return
+        val url = intent.dataString ?: return
+        if (url.startsWith("edeka://main/auth/redirect") ||
+            url.startsWith("https://login.edeka/actions/start-login-edeka-app")
+        ) {
+            incomingEdekaLink.value = url
         }
     }
 }

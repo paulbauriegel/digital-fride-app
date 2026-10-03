@@ -5,19 +5,14 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.os.Build
 import android.util.Base64
+import com.example.groceriesapp.data.ConsumptionEvent
 import com.example.groceriesapp.data.InventoryItem
-import com.example.groceriesapp.data.OpenAiKeyStore
-import com.example.groceriesapp.data.network.OpenAiChatClient
-import com.example.groceriesapp.data.network.OpenAiImageClient
-import com.example.groceriesapp.data.network.RecipeUrlClient
-import com.example.groceriesapp.vision.ocr.awaitTerminalResult
-import com.google.mlkit.vision.common.InputImage
-import com.google.mlkit.vision.text.TextRecognition
-import com.google.mlkit.vision.text.latin.TextRecognizerOptions
+import com.example.groceriesapp.data.atomicWrite
+import com.example.groceriesapp.data.ensureDirectory
+import com.example.groceriesapp.vision.ocr.ReceiptOcrRecognizer
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
-import java.io.OutputStreamWriter
 import java.nio.charset.StandardCharsets
 import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
@@ -52,18 +47,30 @@ data class RecipeQaTurn(val question: String, val answer: String)
  * `filesDir/groceries/recipes/`, atomic writes, blocking mutators guarded by a single lock,
  * state exposed as hot [StateFlow]s.
  */
-class RecipesRepository(context: Context) {
+class RecipesRepository(
+    private val baseDirectory: File,
+    val curatedRecipes: List<Recipe>,
+    private val aiDependencies: RecipeAiDependencies?,
+    private val clock: () -> Long = System::currentTimeMillis,
+) {
 
-    private val appContext = context.applicationContext
+    /** The production wiring: app-private storage, the bundled catalogue, real OpenAI clients. */
+    constructor(context: Context) : this(
+        baseDirectory = File(context.applicationContext.filesDir, "groceries/recipes"),
+        curatedRecipes = RecipeCatalog.fromAssets(context),
+        aiDependencies = RecipeAiDependencies.fromContext(context),
+    )
+
     private val lock = Any()
 
-    private val baseDirectory = File(appContext.filesDir, "groceries/recipes")
     private val userFile = File(baseDirectory, "user.json")
     private val generatedFile = File(baseDirectory, "generated.json")
     private val favoritesFile = File(baseDirectory, "favorites.json")
+    private val cookLogFile = File(baseDirectory, "cooklog.json")
+    private val collectionsFile = File(baseDirectory, "collections.json")
+    private val recentSourcesFile = File(baseDirectory, "recent_sources.json")
+    private val generationsFile = File(baseDirectory, "generations.json")
     val imagesDir: File = File(baseDirectory, "images")
-
-    val curatedRecipes: List<Recipe> = RecipeCatalog.fromAssets(appContext)
 
     private val userRecipesState = MutableStateFlow(loadRecipes(userFile, RecipeSource.USER))
     val userRecipes: StateFlow<List<Recipe>> = userRecipesState.asStateFlow()
@@ -74,24 +81,42 @@ class RecipesRepository(context: Context) {
     private val favoriteIdsState = MutableStateFlow(loadFavorites())
     val favoriteIds: StateFlow<Set<String>> = favoriteIdsState.asStateFlow()
 
+    /** Every time a recipe was cooked, newest first. */
+    private val cookLogState = MutableStateFlow(loadCookLog())
+    val cookLog: StateFlow<List<CookEntry>> = cookLogState.asStateFlow()
+
+    private val collectionsState = MutableStateFlow(loadCollections())
+    val collections: StateFlow<List<RecipeCollection>> = collectionsState.asStateFlow()
+
     // --- AI layer ------------------------------------------------------------------------------
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val keyStore by lazy { OpenAiKeyStore(appContext) }
-    private val chatClient by lazy {
-        OpenAiChatClient(endpoint = "${keyStore.apiBase()}/chat/completions")
-    }
-    private val imageClient by lazy {
-        OpenAiImageClient(endpoint = "${keyStore.apiBase()}/images/generations")
-    }
-    private val urlClient by lazy { RecipeUrlClient() }
+
+    private val ai: RecipeAiDependencies
+        get() = aiDependencies ?: error("AI features are not available in this build.")
+    private val keyStore get() = ai.keyStore
+    private val chatClient get() = ai.chatClient
+    private val imageClient get() = ai.imageClient
+    private val urlClient get() = ai.urlClient
 
     private val aiStateFlow = MutableStateFlow<AiRecipeState>(AiRecipeState.Idle)
     val aiState: StateFlow<AiRecipeState> = aiStateFlow.asStateFlow()
 
-    /** A photo-imported recipe awaiting user confirmation in the editor; not yet persisted. */
-    private val importDraftState = MutableStateFlow<Recipe?>(null)
-    val importDraft: StateFlow<Recipe?> = importDraftState.asStateFlow()
+    /** A scanned or link-imported recipe awaiting review; nothing is persisted until saved. */
+    private val reviewDraftState = MutableStateFlow<RecipeReviewDraft?>(null)
+    val reviewDraft: StateFlow<RecipeReviewDraft?> = reviewDraftState.asStateFlow()
+
+    /** Past structured generations, newest first; each points at recipes in [generatedRecipes]. */
+    private val generationHistoryState = MutableStateFlow(loadGenerations())
+    val generationHistory: StateFlow<List<RecipeGenerationResult>> = generationHistoryState.asStateFlow()
+
+    /** Set when a structured generation lands, so the UI can open its results once. */
+    private val lastGenerationIdState = MutableStateFlow<String?>(null)
+    val lastGenerationId: StateFlow<String?> = lastGenerationIdState.asStateFlow()
+
+    /** Sites the user has imported links from, most recent first. */
+    private val recentSourcesState = MutableStateFlow(loadRecentSources())
+    val recentSources: StateFlow<List<RecentSource>> = recentSourcesState.asStateFlow()
 
     /** Set when an adaptation or a requested recipe lands, so the UI can open it once. */
     private val lastAiRecipeIdState = MutableStateFlow<String?>(null)
@@ -102,18 +127,128 @@ class RecipesRepository(context: Context) {
     val imageVersion: StateFlow<Int> = imageVersionState.asStateFlow()
 
     /** True when an OpenAI key is stored; the same key powers the receipt extractor. */
-    fun aiEnabled(): Boolean = runCatching { keyStore.hasKey() }.getOrDefault(false)
+    fun aiEnabled(): Boolean = aiDependencies?.let { deps -> runCatching { deps.keyStore.hasKey() }.getOrDefault(false) } ?: false
 
     fun clearAiError() {
         if (aiStateFlow.value is AiRecipeState.Error) aiStateFlow.value = AiRecipeState.Idle
     }
 
-    fun clearImportDraft() {
-        importDraftState.value = null
+    /** Drops the pending draft and its scratch photo, if any. */
+    fun discardReviewDraft() {
+        reviewDraftState.value?.imageFile?.delete()
+        reviewDraftState.value = null
+    }
+
+    /**
+     * Persists a reviewed draft as a user recipe. A scan's photo becomes the recipe image, so the
+     * page the recipe came from stays visible on its detail screen.
+     */
+    fun saveReviewedRecipe(recipe: Recipe): Recipe {
+        val draft = reviewDraftState.value
+        saveUserRecipe(recipe)
+        val image = draft?.imageFile
+        if (image != null && image.isFile) {
+            BitmapFactory.decodeFile(image.path)?.let { bitmap ->
+                attachImage(recipe.id, bitmap)
+                bitmap.recycle()
+            }
+        }
+        discardReviewDraft()
+        return recipeById(recipe.id) ?: recipe
+    }
+
+    /**
+     * Photographed recipe: the configured OCR engine reads the page, then the AI extractor
+     * (when a key exists) or the rules parser structures it. Runs outside [runAiRequest] because
+     * it must work keyless; it still reports through [aiState] so the screens show progress.
+     */
+    fun scanRecipePhoto(bitmap: Bitmap, ocr: ReceiptOcrRecognizer) {
+        if (aiStateFlow.value == AiRecipeState.Loading) return
+        aiStateFlow.value = AiRecipeState.Loading
+        val scansDir = File(baseDirectory, "scans")
+        scope.launch {
+            runCatching {
+                ensureDirectory(scansDir)
+                val file = File(scansDir, "scan_${UUID.randomUUID()}.jpg")
+                writeDownscaledJpeg(bitmap, file, SCAN_MAX_DIMENSION)
+                val primary = aiDependencies
+                    ?.takeIf { it.apiKeyOrNull() != null }
+                    ?.let(::OpenAiRecipeTextExtractor)
+                val scanner = RecipeScanner(ocr, FallbackRecipeTextExtractor(primary))
+                val result = scanner.scan(file, clock())
+                if (result.rawText.isBlank()) {
+                    file.delete()
+                    error("No text was found on the photo.")
+                }
+                reviewDraftState.value = RecipeReviewDraft(
+                    recipe = result.recipe,
+                    rawText = result.rawText,
+                    imageFile = file,
+                    sourceLabel = "Scanned photo",
+                )
+            }
+                .onSuccess { aiStateFlow.value = AiRecipeState.Idle }
+                .onFailure { error ->
+                    aiStateFlow.value = AiRecipeState.Error(
+                        error.message ?: "The photo could not be read.",
+                    )
+                }
+        }
     }
 
     fun clearLastAiRecipeId() {
         lastAiRecipeIdState.value = null
+    }
+
+    fun clearLastGenerationId() {
+        lastGenerationIdState.value = null
+    }
+
+    /**
+     * Structured generation from the Generate screen: selected inventory items, preferences and
+     * a time budget. The batch is stored like any other AI recipes plus one history entry that
+     * remembers which recipes belong together.
+     */
+    fun generateRecipes(request: RecipeGenerationRequest, inventory: List<InventoryItem>) {
+        runAiRequest { apiKey ->
+            val today = LocalDate.now()
+            val selected = inventory.filter { it.id in request.selectedInventoryItemIds }
+            val content = chatClient.completeStructured(
+                apiKey = apiKey,
+                model = keyStore.textModel(),
+                systemPrompt = OpenAiRecipePrompts.suggestSystemPrompt(),
+                userContent = OpenAiRecipePrompts.generateUserContent(
+                    request = request,
+                    selectedPrompt = if (selected.isEmpty()) "" else OpenAiRecipePrompts.inventorySnapshot(selected, today),
+                    inventoryPrompt = OpenAiRecipePrompts.inventorySnapshot(inventory, today),
+                ),
+                schemaName = "recipe_generation",
+                schema = OpenAiRecipePrompts.buildSchema(),
+            )
+            val recipes = OpenAiRecipePrompts.parseRecipes(
+                content = content,
+                source = RecipeSource.AI,
+                createdAtEpochMillis = clock(),
+            ).map { recipe ->
+                // The request's preferences are facts about the recipe too; keep them as tags
+                // so the library's dietary filters see generated dishes.
+                val tags = (recipe.tags + request.preferences.map { it.tag }).distinct()
+                recipe.copy(tags = tags)
+            }
+            check(recipes.isNotEmpty()) { "The AI answer contained no usable recipes." }
+            appendGeneratedRecipes(recipes)
+            val result = RecipeGenerationResult(
+                request = request,
+                recipeIds = recipes.map { it.id },
+                createdAtEpochMillis = clock(),
+            )
+            synchronized(lock) {
+                val updated = (listOf(result) + generationHistoryState.value).take(GENERATIONS_CAP)
+                generationHistoryState.value = updated
+                persistGenerations(updated)
+            }
+            lastGenerationIdState.value = result.id
+        }
     }
 
     /** Asks for [OpenAiRecipePrompts.SUGGESTION_COUNT] fresh ideas from the current inventory. */
@@ -132,7 +267,7 @@ class RecipesRepository(context: Context) {
             val recipes = OpenAiRecipePrompts.parseRecipes(
                 content = content,
                 source = RecipeSource.AI,
-                createdAtEpochMillis = System.currentTimeMillis(),
+                createdAtEpochMillis = clock(),
             )
             check(recipes.isNotEmpty()) { "The AI answer contained no usable recipes." }
             appendGeneratedRecipes(recipes)
@@ -168,7 +303,7 @@ class RecipesRepository(context: Context) {
             val recipe = OpenAiRecipePrompts.parseRecipes(
                 content = content,
                 source = RecipeSource.AI,
-                createdAtEpochMillis = System.currentTimeMillis(),
+                createdAtEpochMillis = clock(),
             ).firstOrNull() ?: error("The AI answer contained no usable recipe.")
             appendGeneratedRecipes(listOf(recipe))
             lastAiRecipeIdState.value = recipe.id
@@ -192,7 +327,7 @@ class RecipesRepository(context: Context) {
             val adapted = OpenAiRecipePrompts.parseRecipes(
                 content = content,
                 source = RecipeSource.AI,
-                createdAtEpochMillis = System.currentTimeMillis(),
+                createdAtEpochMillis = clock(),
             ).firstOrNull() ?: error("The AI answer contained no usable recipe.")
             appendGeneratedRecipes(listOf(adapted))
             lastAiRecipeIdState.value = adapted.id
@@ -214,9 +349,16 @@ class RecipesRepository(context: Context) {
                 val html = urlClient.fetchHtml(url)
                 val fromMarkup = RecipeJsonLd.parseFromHtml(
                     html = html,
-                    createdAtEpochMillis = System.currentTimeMillis(),
+                    createdAtEpochMillis = clock(),
                 )
-                importDraftState.value = fromMarkup ?: importFromPageText(html)
+                val recipe = fromMarkup ?: importFromPageText(html)
+                reviewDraftState.value = RecipeReviewDraft(
+                    recipe = recipe,
+                    rawText = null,
+                    imageFile = null,
+                    sourceLabel = RecipeSources.hostOf(url)?.let(RecipeSources::displayName) ?: "Link",
+                )
+                RecipeSources.hostOf(url)?.let(::recordRecentSource)
             }
                 .onSuccess { aiStateFlow.value = AiRecipeState.Idle }
                 .onFailure { error ->
@@ -247,39 +389,9 @@ class RecipesRepository(context: Context) {
         return OpenAiRecipePrompts.parseRecipes(
             content = content,
             source = RecipeSource.USER,
-            createdAtEpochMillis = System.currentTimeMillis(),
+            createdAtEpochMillis = clock(),
             idPrefix = "user_",
         ).firstOrNull() ?: error("That page did not read as a recipe.")
-    }
-
-    /** Cookbook-page import: on-device OCR, then OpenAI structures the text into a draft. */
-    fun importRecipePhoto(bitmap: Bitmap) {
-        runAiRequest { apiKey ->
-            val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
-            val ocrText = try {
-                recognizer.process(InputImage.fromBitmap(bitmap, 0))
-                    .awaitTerminalResult()
-                    .text
-            } finally {
-                recognizer.close()
-            }
-            check(ocrText.isNotBlank()) { "No text was found on the photo." }
-            val content = chatClient.completeStructured(
-                apiKey = apiKey,
-                model = keyStore.textModel(),
-                systemPrompt = OpenAiRecipePrompts.suggestSystemPrompt(),
-                userContent = OpenAiRecipePrompts.importUserContent(ocrText),
-                schemaName = "recipe_import",
-                schema = OpenAiRecipePrompts.buildSchema(),
-            )
-            val draft = OpenAiRecipePrompts.parseRecipes(
-                content = content,
-                source = RecipeSource.USER,
-                createdAtEpochMillis = System.currentTimeMillis(),
-                idPrefix = "user_",
-            ).firstOrNull() ?: error("The photo did not read as a recipe.")
-            importDraftState.value = draft
-        }
     }
 
     /** Generates a photo for a recipe; the result is stored locally like a user photo. */
@@ -350,6 +462,126 @@ class RecipesRepository(context: Context) {
             ?: userRecipesState.value.firstOrNull { it.id == id }
             ?: generatedRecipesState.value.firstOrNull { it.id == id }
 
+    /** Every recipe the app knows about, in the order the library shows them by default. */
+    fun allRecipes(): List<Recipe> =
+        userRecipesState.value + generatedRecipesState.value + curatedRecipes
+
+    // --- Cook history ---------------------------------------------------------------------------
+
+    /** Logs one cooking of a recipe, optionally with its star rating; returns the new entry. */
+    fun recordCooked(
+        recipeId: String,
+        recipeTitle: String,
+        householdId: String?,
+        rating: Int? = null,
+        cookedAtEpochMillis: Long = clock(),
+    ): CookEntry {
+        val entry = CookEntry(
+            recipeId = recipeId,
+            recipeTitle = recipeTitle,
+            cookedAtEpochMillis = cookedAtEpochMillis,
+            rating = rating,
+            householdId = householdId,
+        )
+        synchronized(lock) {
+            val updated = (listOf(entry) + cookLogState.value)
+                .sortedByDescending { it.cookedAtEpochMillis }
+            cookLogState.value = updated
+            persistCookLog(updated)
+        }
+        return entry
+    }
+
+    /**
+     * One-time import of cook history from a household's consumption log, for installs that
+     * cooked before the cook log existed. A marker file per household makes it idempotent, and
+     * entries are only added for recipes with no history yet, so nothing is ever doubled.
+     */
+    fun backfillCookLog(householdId: String, events: List<ConsumptionEvent>) {
+        val marker = File(baseDirectory, "cooklog.backfilled.$householdId")
+        if (marker.isFile) return
+        synchronized(lock) {
+            if (marker.isFile) return
+            val known = cookLogState.value.map { it.recipeId }.toSet()
+            val imported = CookLogBackfill.fromEvents(events, householdId).filter { it.recipeId !in known }
+            if (imported.isNotEmpty()) {
+                val updated = (cookLogState.value + imported).sortedByDescending { it.cookedAtEpochMillis }
+                cookLogState.value = updated
+                persistCookLog(updated)
+            }
+            ensureDirectory(baseDirectory)
+            marker.writeText(clock().toString())
+        }
+    }
+
+    fun rateCookEntry(entryId: String, rating: Int?) {
+        synchronized(lock) {
+            val current = cookLogState.value
+            if (current.none { it.id == entryId }) return
+            val updated = current.map { if (it.id == entryId) it.copy(rating = rating) else it }
+            cookLogState.value = updated
+            persistCookLog(updated)
+        }
+    }
+
+    fun deleteCookEntry(entryId: String) {
+        synchronized(lock) {
+            val current = cookLogState.value
+            val updated = current.filterNot { it.id == entryId }
+            if (updated.size == current.size) return
+            cookLogState.value = updated
+            persistCookLog(updated)
+        }
+    }
+
+    // --- Collections ----------------------------------------------------------------------------
+
+    fun createCollection(name: String): RecipeCollection {
+        val collection = RecipeCollection(name = name.trim(), createdAtEpochMillis = clock())
+        synchronized(lock) {
+            val updated = collectionsState.value + collection
+            collectionsState.value = updated
+            persistCollections(updated)
+        }
+        return collection
+    }
+
+    fun renameCollection(collectionId: String, name: String) {
+        val trimmed = name.trim()
+        if (trimmed.isEmpty()) return
+        updateCollections { list ->
+            list.map { if (it.id == collectionId) it.copy(name = trimmed) else it }
+        }
+    }
+
+    fun deleteCollection(collectionId: String) {
+        updateCollections { list -> list.filterNot { it.id == collectionId } }
+    }
+
+    fun setRecipeInCollection(collectionId: String, recipeId: String, included: Boolean) {
+        updateCollections { list ->
+            list.map { collection ->
+                if (collection.id != collectionId) return@map collection
+                val ids = collection.recipeIds
+                when {
+                    included && recipeId !in ids -> collection.copy(recipeIds = ids + recipeId)
+                    !included && recipeId in ids -> collection.copy(recipeIds = ids - recipeId)
+                    else -> collection
+                }
+            }
+        }
+    }
+
+    private fun updateCollections(transform: (List<RecipeCollection>) -> List<RecipeCollection>) {
+        synchronized(lock) {
+            val current = collectionsState.value
+            val updated = transform(current)
+            if (updated == current) return
+            collectionsState.value = updated
+            persistCollections(updated)
+        }
+    }
+
     fun toggleFavorite(id: String) {
         synchronized(lock) {
             val updated = favoriteIdsState.value.let { current ->
@@ -404,6 +636,14 @@ class RecipesRepository(context: Context) {
                 persistRecipes(generatedFile, remainingGenerated)
             }
             if (id in favoriteIdsState.value) toggleFavoriteLocked(id)
+            val collections = collectionsState.value
+            val prunedCollections = collections.map { collection ->
+                if (id in collection.recipeIds) collection.copy(recipeIds = collection.recipeIds - id) else collection
+            }
+            if (prunedCollections != collections) {
+                collectionsState.value = prunedCollections
+                persistCollections(prunedCollections)
+            }
             imageFileFor(id).delete()
         }
     }
@@ -495,6 +735,88 @@ class RecipesRepository(context: Context) {
         )
     }
 
+    private fun loadCookLog(): List<CookEntry> =
+        loadArray(cookLogFile, COOK_LOG_KEY) { it.toCookEntryOrNull() }
+            .sortedByDescending { it.cookedAtEpochMillis }
+
+    private fun persistCookLog(entries: List<CookEntry>) {
+        atomicWrite(
+            cookLogFile,
+            JSONObject()
+                .put(SCHEMA_VERSION_KEY, SCHEMA_VERSION)
+                .put(COOK_LOG_KEY, JSONArray().apply { entries.forEach { put(it.toJson()) } })
+                .toString(),
+        )
+    }
+
+    internal fun recordRecentSource(host: String) {
+        synchronized(lock) {
+            val existing = recentSourcesState.value.firstOrNull { it.host == host }
+            val updated = listOf(
+                RecentSource(
+                    host = host,
+                    name = RecipeSources.displayName(host),
+                    lastUsedAtEpochMillis = clock(),
+                    count = (existing?.count ?: 0) + 1,
+                ),
+            ) + recentSourcesState.value.filterNot { it.host == host }
+            val capped = updated.take(RECENT_SOURCES_CAP)
+            recentSourcesState.value = capped
+            atomicWrite(
+                recentSourcesFile,
+                JSONObject()
+                    .put(SCHEMA_VERSION_KEY, SCHEMA_VERSION)
+                    .put(RECENT_SOURCES_KEY, JSONArray().apply { capped.forEach { put(it.toJson()) } })
+                    .toString(),
+            )
+        }
+    }
+
+    private fun loadGenerations(): List<RecipeGenerationResult> =
+        loadArray(generationsFile, GENERATIONS_KEY) { it.toRecipeGenerationResultOrNull() }
+            .sortedByDescending { it.createdAtEpochMillis }
+
+    private fun persistGenerations(results: List<RecipeGenerationResult>) {
+        atomicWrite(
+            generationsFile,
+            JSONObject()
+                .put(SCHEMA_VERSION_KEY, SCHEMA_VERSION)
+                .put(GENERATIONS_KEY, JSONArray().apply { results.forEach { put(it.toJson()) } })
+                .toString(),
+        )
+    }
+
+    private fun loadRecentSources(): List<RecentSource> =
+        loadArray(recentSourcesFile, RECENT_SOURCES_KEY) { it.toRecentSourceOrNull() }
+            .sortedByDescending { it.lastUsedAtEpochMillis }
+
+    private fun loadCollections(): List<RecipeCollection> =
+        loadArray(collectionsFile, COLLECTIONS_KEY) { it.toRecipeCollectionOrNull() }
+
+    private fun persistCollections(collections: List<RecipeCollection>) {
+        atomicWrite(
+            collectionsFile,
+            JSONObject()
+                .put(SCHEMA_VERSION_KEY, SCHEMA_VERSION)
+                .put(COLLECTIONS_KEY, JSONArray().apply { collections.forEach { put(it.toJson()) } })
+                .toString(),
+        )
+    }
+
+    /** Absent file → empty; unreadable file → empty; unreadable entries → skipped. */
+    private fun <T> loadArray(file: File, key: String, transform: (JSONObject) -> T?): List<T> {
+        if (!file.isFile) return emptyList()
+        val root = runCatching { JSONObject(file.readText(StandardCharsets.UTF_8)) }.getOrNull()
+            ?: return emptyList()
+        val array = root.optJSONArray(key) ?: return emptyList()
+        return buildList {
+            for (i in 0 until array.length()) {
+                val entry = array.optJSONObject(i) ?: continue
+                transform(entry)?.let(::add)
+            }
+        }
+    }
+
     private fun loadFavorites(): Set<String> {
         if (!favoritesFile.isFile) return emptySet()
         val root = runCatching { JSONObject(favoritesFile.readText(StandardCharsets.UTF_8)) }
@@ -533,6 +855,28 @@ class RecipesRepository(context: Context) {
         )
     }
 
+    private fun writeDownscaledJpeg(bitmap: Bitmap, target: File, maxDimension: Int) {
+        val scale = maxDimension.toDouble() / maxOf(bitmap.width, bitmap.height)
+        val scaled = if (scale >= 1.0) {
+            bitmap
+        } else {
+            Bitmap.createScaledBitmap(
+                bitmap,
+                (bitmap.width * scale).toInt().coerceAtLeast(1),
+                (bitmap.height * scale).toInt().coerceAtLeast(1),
+                true,
+            )
+        }
+        try {
+            FileOutputStream(target).use { output ->
+                scaled.compress(Bitmap.CompressFormat.JPEG, SCAN_JPEG_QUALITY, output)
+                output.fd.sync()
+            }
+        } finally {
+            if (scaled !== bitmap) scaled.recycle()
+        }
+    }
+
     private fun writeDownscaledWebp(bitmap: Bitmap, target: File) {
         val scaled = downscaledToMaxDimension(bitmap)
         val format = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
@@ -560,37 +904,28 @@ class RecipesRepository(context: Context) {
         const val SCHEMA_VERSION = 1
         const val RECIPES_KEY = "recipes"
         const val FAVORITES_KEY = "ids"
+        const val COOK_LOG_KEY = "entries"
+        const val COLLECTIONS_KEY = "collections"
+        const val RECENT_SOURCES_KEY = "sources"
+        const val RECENT_SOURCES_CAP = 8
+        const val GENERATIONS_KEY = "generations"
+        const val GENERATIONS_CAP = 10
+        /** Scans keep more resolution than stored photos: OCR needs legible small print. */
+        const val SCAN_MAX_DIMENSION = 2048
         const val FILE_PREFIX = "file:"
-        const val GENERATED_CAP = 20
+        // Raised from 20: a structured batch is up to ten recipes and history keeps several.
+        const val GENERATED_CAP = 60
         const val MAX_PAGE_TEXT_CHARS = 24_000
         const val MAX_IMAGE_DIMENSION = 1024
         const val IMAGE_QUALITY = 80
+        const val SCAN_JPEG_QUALITY = 90
     }
 }
 
-private fun ensureDirectory(directory: File) {
-    if (!directory.isDirectory) check(directory.mkdirs() || directory.isDirectory) {
-        "Could not create directory ${directory.path}"
-    }
-}
-
-// Local copy of GroceriesRepository's file-private atomic write; small enough to not share.
-private fun atomicWrite(target: File, contents: String) {
-    ensureDirectory(checkNotNull(target.parentFile))
-    val temporary = File(target.parentFile, ".${target.name}.${UUID.randomUUID()}.tmp")
-    try {
-        FileOutputStream(temporary).use { output ->
-            val writer = OutputStreamWriter(output, StandardCharsets.UTF_8)
-            writer.write(contents)
-            writer.flush()
-            output.fd.sync()
-        }
-        moveAtomically(temporary, target)
-    } finally {
-        if (temporary.exists()) temporary.delete()
-    }
-}
-
+/**
+ * Replace-existing move for freshly written image files. `FileStorage.moveAtomicallyOrPlain`
+ * deliberately refuses to overwrite, which is right for household directories and wrong here.
+ */
 private fun moveAtomically(from: File, to: File) {
     try {
         Files.move(

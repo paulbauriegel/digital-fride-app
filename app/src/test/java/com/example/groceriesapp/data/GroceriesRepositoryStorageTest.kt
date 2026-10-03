@@ -103,6 +103,34 @@ class GroceriesRepositoryStorageTest {
     }
 
     @Test
+    fun edekaReceiptIdentityRoundTripsAndPreventsDuplicateImports() {
+        val repository = repository()
+        val first = repository.importEdekaReceipt(
+            merchant = "EDEKA Testmarkt",
+            dateIso = "2026-08-27T18:24:00Z",
+            totalCents = 1234,
+            currency = "EUR",
+            rawText = "Bio Milch  1,49 €",
+            items = listOf(ReceiptItem(name = "Bio Milch", priceCents = 149)),
+            edekaReceiptId = 42,
+        )
+        val duplicate = repository.importEdekaReceipt(
+            merchant = "Different",
+            dateIso = "2026-08-27T18:24:00Z",
+            totalCents = 9999,
+            currency = "EUR",
+            rawText = "Different",
+            items = listOf(ReceiptItem(name = "Different")),
+            edekaReceiptId = 42,
+        )
+
+        assertEquals(first.id, duplicate.id)
+        assertTrue(repository.hasEdekaReceipt(42))
+        assertEquals(42, repository().receipts.value.single().edekaReceiptId)
+        assertEquals(ReceiptSource.EDEKA, repository().receipts.value.single().source)
+    }
+
+    @Test
     fun inventoryDoesNotLeakBetweenHouseholds() {
         repository("default").addInventoryItem(InventoryItem(id = "i1", name = "Milk"))
 

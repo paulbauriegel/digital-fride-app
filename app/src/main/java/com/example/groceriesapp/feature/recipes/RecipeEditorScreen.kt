@@ -3,6 +3,8 @@ package com.example.groceriesapp.feature.recipes
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -19,6 +21,10 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExposedDropdownMenuAnchorType
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -44,12 +50,16 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.example.groceriesapp.data.recipes.DietaryTag
 import com.example.groceriesapp.data.recipes.Recipe
+import com.example.groceriesapp.data.recipes.RecipeCategory
+import com.example.groceriesapp.data.recipes.RecipeTaxonomy
 import com.example.groceriesapp.data.recipes.RecipeIngredient
 import com.example.groceriesapp.data.recipes.RecipeSource
 import com.example.groceriesapp.data.recipes.newRecipeId
 import com.example.groceriesapp.data.taxonomy.FoodConceptCatalog
 import com.example.groceriesapp.data.taxonomy.resolveIconRes
+import com.example.groceriesapp.ui.components.ChoiceChipRow
 import com.example.groceriesapp.ui.components.SectionHeader
 import com.example.groceriesapp.ui.formatQuantity
 import com.example.groceriesapp.ui.theme.spacing
@@ -97,6 +107,12 @@ fun RecipeEditorScreen(
     onSave: (Recipe) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    /** Overrides the "New recipe" / "Edit recipe" title, e.g. for the scan review step. */
+    screenTitle: String? = null,
+    saveLabel: String = "Save recipe",
+    topBarActions: @Composable RowScope.() -> Unit = {},
+    /** Rendered above the form — the review step shows the source photo and OCR text here. */
+    header: (@Composable ColumnScope.() -> Unit)? = null,
 ) {
     val focusManager = LocalFocusManager.current
     var title by remember { mutableStateOf(initial?.title.orEmpty()) }
@@ -105,7 +121,17 @@ fun RecipeEditorScreen(
     var titleEdited by remember { mutableStateOf(initial?.title != null) }
     var servings by remember { mutableStateOf(initial?.servings?.toString() ?: "2") }
     var prepMinutes by remember { mutableStateOf(initial?.prepMinutes?.toString() ?: "30") }
-    var tags by remember { mutableStateOf(initial?.tags?.joinToString(", ").orEmpty()) }
+    // Category and diet are edited as pickers and written back as canonical tags; whatever else
+    // the recipe was tagged with stays a free-text field.
+    var category by remember {
+        mutableStateOf(initial?.let { RecipeTaxonomy.categoryOf(it) }?.takeIf { tagged ->
+            initial.tags.map(RecipeTaxonomy::normalizeTag).contains(tagged.tag) || tagged != RecipeCategory.OTHER
+        })
+    }
+    var dietary by remember { mutableStateOf(initial?.let { RecipeTaxonomy.dietaryOf(it) }.orEmpty()) }
+    var tags by remember {
+        mutableStateOf(initial?.let { RecipeTaxonomy.freeTagsOf(it) }.orEmpty().joinToString(", "))
+    }
     val ingredients = remember {
         initial?.ingredients?.map { ingredient ->
             IngredientEditState(
@@ -147,7 +173,11 @@ fun RecipeEditorScreen(
             steps = cleanSteps,
             servings = servingCount,
             prepMinutes = minutes,
-            tags = tags.split(',').map(String::trim).filter(String::isNotEmpty),
+            tags = (
+                listOfNotNull(category?.tag) +
+                    dietary.map { it.tag } +
+                    tags.split(',').map(String::trim).filter(String::isNotEmpty)
+                ).distinct(),
             imageRef = initial?.imageRef?.takeIf { initial.source == RecipeSource.USER },
             source = RecipeSource.USER,
             createdAtEpochMillis = initial?.createdAtEpochMillis ?: System.currentTimeMillis(),
@@ -165,13 +195,14 @@ fun RecipeEditorScreen(
             TopAppBar(
                 title = {
                     Text(
-                        if (initial == null || initial.source != RecipeSource.USER) {
+                        screenTitle ?: if (initial == null || initial.source != RecipeSource.USER) {
                             "New recipe"
                         } else {
                             "Edit recipe"
                         },
                     )
                 },
+                actions = topBarActions,
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -192,6 +223,7 @@ fun RecipeEditorScreen(
                 ),
             verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.medium),
         ) {
+            header?.invoke(this)
             OutlinedTextField(
                 value = title,
                 onValueChange = {
@@ -248,10 +280,23 @@ fun RecipeEditorScreen(
                     modifier = Modifier.weight(1f),
                 )
             }
+            CategoryDropdown(selected = category, onSelect = { category = it })
+            Text(
+                text = "Dietary",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            ChoiceChipRow(
+                options = DietaryTag.entries,
+                selected = dietary,
+                label = { it.label },
+                onSelectionChange = { dietary = it },
+                allLabel = null,
+            )
             OutlinedTextField(
                 value = tags,
                 onValueChange = { tags = it },
-                label = { Text("Tags (comma-separated)") },
+                label = { Text("Other tags (comma-separated)") },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
                 keyboardActions = KeyboardActions(
@@ -313,7 +358,7 @@ fun RecipeEditorScreen(
                     .fillMaxWidth()
                     .padding(top = MaterialTheme.spacing.small),
             ) {
-                Text("Save recipe")
+                Text(saveLabel)
             }
         }
     }
@@ -401,6 +446,48 @@ private fun IngredientEditor(
                     selected = state.optional,
                     onClick = { state.optional = !state.optional },
                     label = { Text("Optional") },
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CategoryDropdown(
+    selected: RecipeCategory?,
+    onSelect: (RecipeCategory?) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = it },
+    ) {
+        OutlinedTextField(
+            value = selected?.label ?: "Not set",
+            onValueChange = {},
+            readOnly = true,
+            label = { Text("Category") },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            modifier = Modifier
+                .fillMaxWidth()
+                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
+        )
+        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            DropdownMenuItem(
+                text = { Text("Not set") },
+                onClick = {
+                    onSelect(null)
+                    expanded = false
+                },
+            )
+            RecipeCategory.entries.forEach { option ->
+                DropdownMenuItem(
+                    text = { Text(option.label) },
+                    onClick = {
+                        onSelect(option)
+                        expanded = false
+                    },
                 )
             }
         }

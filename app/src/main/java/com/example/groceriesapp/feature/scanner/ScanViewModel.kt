@@ -24,6 +24,12 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
+/** Where a session's image comes from: a live AR recording, or one imported photo. */
+enum class ScanSource {
+    LIVE,
+    PHOTO,
+}
+
 enum class ScanPhase {
     READY,
     RECORDING,
@@ -34,6 +40,7 @@ enum class ScanPhase {
 
 data class ScanUiState(
     val phase: ScanPhase = ScanPhase.READY,
+    val source: ScanSource = ScanSource.LIVE,
     val observation: ReceiptCaptureObservation = ReceiptCaptureObservation(),
     val acceptedFramePaths: List<String> = emptyList(),
     val captureBusy: Boolean = false,
@@ -54,6 +61,7 @@ data class ScanUiState(
     val initialKeyframePath: String? get() = acceptedFramePaths.lastOrNull()
     val canRecord: Boolean
         get() = phase == ScanPhase.READY &&
+            source == ScanSource.LIVE &&
             observation.arTracking &&
             observation.boundary != null &&
             observation.guidance in setOf(
@@ -71,6 +79,7 @@ class ScanViewModel(
     sessionId: String,
     ocrRecognizer: ReceiptOcrRecognizer,
     itemExtractor: ReceiptItemExtractor = RulesReceiptItemExtractor(),
+    private val source: ScanSource = ScanSource.LIVE,
 ) : ViewModel() {
     private val draft = repository.openOrCreateScanSession(sessionId)
     private val session: ScanSession = draft.session
@@ -82,6 +91,7 @@ class ScanViewModel(
     private val terminated = AtomicBoolean(false)
     private val _uiState = MutableStateFlow(
         ScanUiState(
+            source = source,
             acceptedFramePaths = draft.acceptedFramePaths,
             slowOcrEngine = ocrRecognizer !is MlKitReceiptOcrRecognizer,
             slowExtraction = itemExtractor !is RulesReceiptItemExtractor,
@@ -89,6 +99,15 @@ class ScanViewModel(
     )
     val uiState: StateFlow<ScanUiState> = _uiState.asStateFlow()
     private var processingJob: Job? = null
+    private var importJob: Job? = null
+
+    init {
+        // A photo session that reopens with its frame already written — the app was rebuilt while
+        // the pipeline was running — has nothing left to import, so it carries on from there.
+        if (source == ScanSource.PHOTO && draft.acceptedFramePaths.isNotEmpty()) {
+            process(draft.acceptedFramePaths)
+        }
+    }
     private var processingGeneration = 0L
 
     @Synchronized
@@ -186,6 +205,62 @@ class ScanViewModel(
         process(current.acceptedFramePaths)
     }
 
+    /**
+     * Turns one imported photo into this session's only keyframe, then processes it like a finished
+     * recording.
+     *
+     * [writeFrame] does the decoding and writing so that no Android imaging reaches the view model.
+     * It returns false when the photo cannot be read at all.
+     */
+    @Synchronized
+    fun importPhoto(writeFrame: suspend (File) -> Boolean) {
+        if (terminated.get()) return
+        val current = _uiState.value
+        if (current.phase != ScanPhase.READY || current.acceptedFramePaths.isNotEmpty()) return
+        _uiState.value = current.copy(
+            phase = ScanPhase.PROCESSING,
+            processingStage = ProcessingStage.STITCHING,
+            processingProgress = 0f,
+            processingPreviewPath = null,
+            errorMessage = null,
+            processingFailure = false,
+        )
+        // Deliberately not `processingJob`: this coroutine ends by calling process(), which cancels
+        // that job, and a job may not cancel itself out of its own body halfway through.
+        importJob = viewModelScope.launch {
+            val storedPath = runCatching {
+                val frameFile = repository.nextFrameFile(session, 0)
+                if (!writeFrame(frameFile)) {
+                    frameFile.delete()
+                    return@runCatching null
+                }
+                repository.updateScanDraft(session, listOf(frameFile.absolutePath))
+                    .acceptedFramePaths
+                    .single()
+            }.getOrNull()
+            if (storedPath == null) onPhotoImportFailed() else onPhotoImported(storedPath)
+        }
+    }
+
+    @Synchronized
+    private fun onPhotoImported(path: String) {
+        if (terminated.get()) return
+        _uiState.update { it.copy(acceptedFramePaths = listOf(path)) }
+        process(listOf(path))
+    }
+
+    @Synchronized
+    private fun onPhotoImportFailed() {
+        if (terminated.get()) return
+        _uiState.update {
+            it.copy(
+                phase = ScanPhase.ERROR,
+                processingFailure = false,
+                errorMessage = "The photo could not be read.",
+            )
+        }
+    }
+
     @Synchronized
     fun retry() {
         if (terminated.get()) return
@@ -206,6 +281,7 @@ class ScanViewModel(
     @Synchronized
     fun discardSession() {
         if (!terminated.compareAndSet(false, true)) return
+        importJob?.cancel()
         processingJob?.cancel()
         repository.discardScanSession(session)
     }
@@ -231,6 +307,9 @@ class ScanViewModel(
                 val receipt = processingPipeline.process(
                     session = session,
                     framePaths = framePaths,
+                    // A photo keeps the orientation it was shot in and may show no paper edge at
+                    // all; a recording needs its boundaries and its long axis, so it gets neither.
+                    singlePhoto = source == ScanSource.PHOTO,
                     onPreviewReady = { previewPath ->
                         if (generation == processingGeneration) {
                             _uiState.update { it.copy(processingPreviewPath = previewPath) }
@@ -263,8 +342,11 @@ class ScanViewModel(
                         it.copy(
                             phase = ScanPhase.ERROR,
                             processingFailure = true,
-                            errorMessage =
-                                error.message ?: "The receipt panorama could not be created.",
+                            errorMessage = error.message ?: if (source == ScanSource.PHOTO) {
+                                "The photo could not be turned into a receipt."
+                            } else {
+                                "The receipt panorama could not be created."
+                            },
                         )
                     }
                 }
@@ -286,6 +368,7 @@ class ScanViewModel(
 
     override fun onCleared() {
         terminated.set(true)
+        importJob?.cancel()
         processingJob?.cancel()
         super.onCleared()
     }
@@ -296,10 +379,11 @@ class ScanViewModelFactory(
     private val sessionId: String,
     private val ocrRecognizer: ReceiptOcrRecognizer,
     private val itemExtractor: ReceiptItemExtractor,
+    private val source: ScanSource = ScanSource.LIVE,
 ) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         require(modelClass.isAssignableFrom(ScanViewModel::class.java))
-        return ScanViewModel(repository, sessionId, ocrRecognizer, itemExtractor) as T
+        return ScanViewModel(repository, sessionId, ocrRecognizer, itemExtractor, source) as T
     }
 }

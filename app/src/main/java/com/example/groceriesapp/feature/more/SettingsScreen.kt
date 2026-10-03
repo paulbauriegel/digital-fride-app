@@ -94,6 +94,7 @@ private enum class SettingsDetail(val title: String) {
     HOUSEHOLDS("Households"),
     BIO_COMPANY("BIO COMPANY"),
     REWE("REWE"),
+    EDEKA("EDEKA"),
     OPENAI("OpenAI"),
     TEXT_RECOGNITION("Text recognition"),
     ITEM_EXTRACTION("Item extraction"),
@@ -116,6 +117,9 @@ fun SettingsScreen(
     reweRepo: com.example.groceriesapp.data.ReweRepository,
     onConnectRewe: () -> Unit,
     onOpenReweReceipts: () -> Unit,
+    edekaRepo: com.example.groceriesapp.data.EdekaRepository,
+    onConnectEdeka: () -> Unit,
+    onOpenEdekaReceipts: () -> Unit,
     modifier: Modifier = Modifier,
     /** Set when Settings renders as a full-screen sub-destination rather than a tab. */
     onBack: (() -> Unit)? = null,
@@ -143,6 +147,9 @@ fun SettingsScreen(
     val reweCredentials by reweRepo.credentials.collectAsStateWithLifecycle()
     val reweLoginState by reweRepo.loginState.collectAsStateWithLifecycle()
     val reweSyncState by reweRepo.syncState.collectAsStateWithLifecycle()
+    val edekaAccount by edekaRepo.account.collectAsStateWithLifecycle()
+    val edekaLoginState by edekaRepo.loginState.collectAsStateWithLifecycle()
+    val edekaSyncState by edekaRepo.syncState.collectAsStateWithLifecycle()
     var reweCredentialError by remember { mutableStateOf<String?>(null) }
     var detail by rememberSaveable { mutableStateOf<SettingsDetail?>(null) }
     val households by householdRepo.households.collectAsStateWithLifecycle()
@@ -238,6 +245,15 @@ fun SettingsScreen(
                     },
                     onOpenReceipts = onOpenReweReceipts,
                 )
+                SettingsDetail.EDEKA -> EdekaAccountCard(
+                    account = edekaAccount,
+                    loginState = edekaLoginState,
+                    syncState = edekaSyncState,
+                    onConnect = onConnectEdeka,
+                    onDisconnect = { coroutineScope.launch { edekaRepo.logout() } },
+                    onFetchReceipts = { coroutineScope.launch { edekaRepo.fetchReceipts() } },
+                    onOpenReceipts = onOpenEdekaReceipts,
+                )
                 SettingsDetail.OPENAI -> OpenAiDetail(
                     keyStore = openAiKeyStore,
                     keyPresent = openAiKeyPresent,
@@ -283,6 +299,7 @@ fun SettingsScreen(
         itemExtractionEngine = itemExtractionEngine,
         bioCompanyConnected = account != null,
         reweConnected = reweAccount != null,
+        edekaConnected = edekaAccount != null,
         openAiConnected = openAiKeyPresent,
         onOpenDetail = { detail = it },
         onBack = onBack,
@@ -303,6 +320,7 @@ private fun SettingsHome(
     itemExtractionEngine: ItemExtractionEngine,
     bioCompanyConnected: Boolean,
     reweConnected: Boolean,
+    edekaConnected: Boolean,
     openAiConnected: Boolean,
     onOpenDetail: (SettingsDetail) -> Unit,
     onBack: (() -> Unit)?,
@@ -402,6 +420,12 @@ private fun SettingsHome(
                             merchant = "REWE",
                             connected = reweConnected,
                             onClick = { onOpenDetail(SettingsDetail.REWE) },
+                        )
+                        SettingsRowDivider(inset = 72.dp)
+                        AccountRow(
+                            merchant = "EDEKA",
+                            connected = edekaConnected,
+                            onClick = { onOpenDetail(SettingsDetail.EDEKA) },
                         )
                         SettingsRowDivider(inset = 72.dp)
                         SettingsRow(

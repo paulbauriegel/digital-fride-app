@@ -230,4 +230,50 @@ class OpenAiRecipePromptsTest {
         .put("amount", amount ?: JSONObject.NULL)
         .put("unit", unit ?: JSONObject.NULL)
         .put("optional", optional)
+
+    @Test
+    fun `generate prompt names selected items preferences and time`() {
+        val request = RecipeGenerationRequest(
+            selectedInventoryItemIds = setOf("i1"),
+            preferences = setOf(GenerationPreference.VEGAN),
+            time = GenerationTime.UNDER_30,
+            freeText = "something warming",
+            count = 4,
+        )
+        val prompt = OpenAiRecipePrompts.generateUserContent(
+            request = request,
+            selectedPrompt = "TOFU | Tofu | 200 g | FRIDGE | expires in 2 days",
+            inventoryPrompt = "TOFU | Tofu | 200 g | FRIDGE | expires in 2 days\nRICE | Rice | 1 kg | PANTRY | no date",
+        )
+
+        assertTrue(prompt.contains("Suggest 4 different recipes"))
+        assertTrue(prompt.contains("SELECTED items"))
+        assertTrue(prompt.contains("vegan (no animal products)"))
+        assertTrue(prompt.contains("\"vegan\""))
+        assertTrue(prompt.contains("prepMinutes must be at most 30"))
+        assertTrue(prompt.contains("something warming"))
+        assertTrue(prompt.contains("matchLabel"))
+    }
+
+    @Test
+    fun `schema requires a match label and parse turns it into a tag`() {
+        val schema = OpenAiRecipePrompts.buildSchema()
+        val item = schema.getJSONObject("properties").getJSONObject("recipes").getJSONObject("items")
+        val required = item.getJSONArray("required").let { array -> List(array.length()) { array.getString(it) } }
+        assertTrue("matchLabel" in required)
+        val labels = item.getJSONObject("properties").getJSONObject("matchLabel").getJSONArray("enum")
+        assertEquals(listOf("best", "quick", "protein", "none"), List(labels.length()) { labels.getString(it) })
+
+        val content = """
+            {"recipes":[
+              {"title":"A","servings":2,"prepMinutes":20,"tags":["quick"],"ingredients":[{"conceptId":null,"name":"Salt","amount":null,"unit":null,"optional":false}],"steps":["Go."],"matchLabel":"protein"},
+              {"title":"B","servings":2,"prepMinutes":20,"tags":[],"ingredients":[{"conceptId":null,"name":"Salt","amount":null,"unit":null,"optional":false}],"steps":["Go."],"matchLabel":"none"},
+              {"title":"C","servings":2,"prepMinutes":20,"tags":[],"ingredients":[{"conceptId":null,"name":"Salt","amount":null,"unit":null,"optional":false}],"steps":["Go."]}
+            ]}
+        """.trimIndent()
+        val recipes = OpenAiRecipePrompts.parseRecipes(content, RecipeSource.AI, 1L)
+        assertEquals(listOf("quick", "ai:protein"), recipes[0].tags)
+        assertTrue(recipes[1].tags.isEmpty())
+        assertTrue(recipes[2].tags.isEmpty())
+    }
 }

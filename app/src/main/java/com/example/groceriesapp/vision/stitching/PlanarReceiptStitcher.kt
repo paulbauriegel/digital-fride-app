@@ -52,9 +52,16 @@ class PlanarReceiptStitcher(
     private val normalizedWidth: Int = 1_000,
     private val tileHeight: Int = 2_048,
 ) {
+    /**
+     * @param singlePhoto marks one imported photo rather than a swept recording. Such a photo is
+     * kept in the orientation the user shot it in, and it survives having no findable paper edges by
+     * falling back to the whole image. A recording gets neither: it needs real boundaries to align
+     * its frames against each other, and its own long axis is the only cue to which way is up.
+     */
     suspend fun stitch(
         frameFiles: List<File>,
         outputDirectory: File,
+        singlePhoto: Boolean = false,
         onProgress: (Float) -> Unit = {},
     ): StitchedReceiptArtifact = withContext(Dispatchers.Default) {
         require(frameFiles.isNotEmpty()) { "At least one captured frame is required" }
@@ -66,10 +73,16 @@ class PlanarReceiptStitcher(
             frameFiles = frameFiles,
             tracker = tracker,
             boundaryModel = boundaryModel,
+            allowFullFrameFallback = singlePhoto && frameFiles.size == 1,
             onProgress = { onProgress(it * 0.34f) },
         )
         try {
-            val normalized = normalizeTransforms(registered)
+            // A photo is already the right way up — the user framed it. Aligning its long axis is
+            // ambiguous by 180 degrees, so doing it here would flip a correctly shot receipt.
+            val normalized = normalizeTransforms(
+                frames = registered,
+                alignToLongAxis = !singlePhoto,
+            )
             val outputHeight = normalized.outputHeight
             if (outputHeight <= 0 || outputHeight > MAX_OUTPUT_HEIGHT) {
                 throw StitchingException("The receipt panorama dimensions are unsafe.")
@@ -115,6 +128,7 @@ class PlanarReceiptStitcher(
         frameFiles: List<File>,
         tracker: OpenCvPlanarTracker,
         boundaryModel: OpenCvReceiptBoundaryModel,
+        allowFullFrameFallback: Boolean,
         onProgress: (Float) -> Unit,
     ): List<RegisteredFrame> {
         val registered = mutableListOf<RegisteredFrame>()
@@ -132,18 +146,27 @@ class PlanarReceiptStitcher(
                 } finally {
                     gray.release()
                 }
+                // A photographed receipt often fills the frame, leaving no paper edge to find. The
+                // whole image is then the best available boundary; it can still be cropped later in
+                // the receipt image editor.
                 val boundary = features.boundary
-                    ?: run {
+                    ?.takeIf { it.confidence >= MIN_OFFLINE_BOUNDARY_CONFIDENCE }
+                val boundaryPoints = when {
+                    boundary != null -> boundary.points
+                    allowFullFrameFallback ->
+                        fullFrameBoundaryPoints(features.gray.cols(), features.gray.rows())
+                    features.boundary == null -> {
                         features.close()
                         throw StitchingException(
                             "Receipt edges were not recoverable in keyframe ${index + 1}.",
                         )
                     }
-                if (boundary.confidence < MIN_OFFLINE_BOUNDARY_CONFIDENCE) {
-                    features.close()
-                    throw StitchingException(
-                        "Receipt edge confidence is too low in keyframe ${index + 1}.",
-                    )
+                    else -> {
+                        features.close()
+                        throw StitchingException(
+                            "Receipt edge confidence is too low in keyframe ${index + 1}.",
+                        )
+                    }
                 }
 
                 val globalTransform: Mat
@@ -183,10 +206,11 @@ class PlanarReceiptStitcher(
                     file = file,
                     width = features.gray.cols(),
                     height = features.gray.rows(),
-                    boundaryPoints = boundary.points,
+                    boundaryPoints = boundaryPoints,
                     sharpness = features.sharpness,
                     globalTransform = globalTransform,
                     alignmentConfidence = alignmentConfidence,
+                    fullFrameFallback = boundary == null,
                 )
                 references.addLast(
                     ReferenceFrame(
@@ -208,7 +232,10 @@ class PlanarReceiptStitcher(
         }
     }
 
-    private fun normalizeTransforms(frames: List<RegisteredFrame>): NormalizedTransforms {
+    private fun normalizeTransforms(
+        frames: List<RegisteredFrame>,
+        alignToLongAxis: Boolean,
+    ): NormalizedTransforms {
         val globalBoundaryPoints = frames.flatMap { frame ->
             transformPoints(frame.boundaryPoints, frame.globalTransform)
         }
@@ -216,8 +243,13 @@ class PlanarReceiptStitcher(
             throw StitchingException("The receipt panorama has no stable paper boundary.")
         }
 
-        val longAxisAngle = longestAxisAngle(globalBoundaryPoints)
-        val rotation = rotationMatrix(Math.PI / 2.0 - longAxisAngle)
+        val rotation = if (alignToLongAxis) {
+            rotationMatrix(
+                straighteningAngle(Math.PI / 2.0 - longestAxisAngle(globalBoundaryPoints)),
+            )
+        } else {
+            identityMatrix()
+        }
         val rotatedTransforms = frames.map { frame ->
             multiply(rotation, frame.globalTransform)
         }
@@ -495,6 +527,7 @@ class PlanarReceiptStitcher(
         val sharpness: Float,
         val globalTransform: Mat,
         val alignmentConfidence: Float,
+        val fullFrameFallback: Boolean,
     ) : AutoCloseable {
         override fun close() {
             globalTransform.release()
@@ -511,6 +544,39 @@ class PlanarReceiptStitcher(
         const val PREFERRED_PREVIEW_WIDTH = 640
         const val MAX_PREVIEW_HEIGHT = 16_000
     }
+}
+
+/**
+ * Folds a straightening rotation into a quarter turn either way.
+ *
+ * A long axis is a line, not an arrow: standing the paper upright by this angle or by this angle
+ * plus a half turn look the same to the geometry, and the raw angle from the detected edge picks
+ * between them arbitrarily. Taking the smaller rotation keeps the image the way up it came in, so a
+ * receipt that was already upright is never turned on its head.
+ */
+internal fun straighteningAngle(radians: Double): Double {
+    if (!radians.isFinite()) return 0.0
+    val quarterTurn = Math.PI / 2.0
+    var angle = radians
+    while (angle > quarterTurn) angle -= Math.PI
+    while (angle <= -quarterTurn) angle += Math.PI
+    return angle
+}
+
+/**
+ * The whole image as a boundary quad, clockwise from the top-left — what a single imported photo
+ * falls back to when no paper edge is detectable in it.
+ */
+internal fun fullFrameBoundaryPoints(width: Int, height: Int): List<PixelPoint> {
+    require(width > 0 && height > 0) { "The frame has no pixels." }
+    val right = (width - 1).toDouble()
+    val bottom = (height - 1).toDouble()
+    return listOf(
+        PixelPoint(0.0, 0.0),
+        PixelPoint(right, 0.0),
+        PixelPoint(right, bottom),
+        PixelPoint(0.0, bottom),
+    )
 }
 
 data class PreviewDimensions(

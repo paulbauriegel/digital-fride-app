@@ -64,6 +64,7 @@ private enum class ReceiptFilter(val label: String) {
     SCANNED("Scanned"),
     BIO_COMPANY("BIO COMPANY"),
     REWE("REWE"),
+    EDEKA("EDEKA"),
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -72,10 +73,14 @@ fun ReceiptsScreen(
     receipts: List<DigitalReceipt>,
     bioCompanyConnected: Boolean,
     reweConnected: Boolean,
-    onScanReceipt: () -> Unit,
+    edekaConnected: Boolean,
+    onTakeReceiptPhoto: () -> Unit,
+    onPickReceiptPhoto: () -> Unit,
+    onScanLongReceipt: () -> Unit,
     onOpenReceipt: (String) -> Unit,
     onImportBioCompany: () -> Unit,
     onImportRewe: () -> Unit,
+    onImportEdeka: () -> Unit,
     onOpenStoreSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -176,8 +181,8 @@ fun ReceiptsScreen(
             when {
                 receipts.isEmpty() -> EmptyStateCard(
                     title = "Keep every receipt in one piece",
-                    body = "Record across the receipt, or import purchases from a connected " +
-                        "store account. The archive stays on this device.",
+                    body = "Photograph a receipt, record a long one, or import purchases from a " +
+                        "connected store account. The archive stays on this device.",
                     actionLabel = "Add receipt",
                     onAction = { addSheetOpen = true },
                     modifier = Modifier
@@ -268,9 +273,13 @@ fun ReceiptsScreen(
         AddReceiptSheet(
             bioCompanyConnected = bioCompanyConnected,
             reweConnected = reweConnected,
-            onScanReceipt = onScanReceipt,
+            edekaConnected = edekaConnected,
+            onTakePhoto = onTakeReceiptPhoto,
+            onPickPhoto = onPickReceiptPhoto,
+            onScanLongReceipt = onScanLongReceipt,
             onImportBioCompany = onImportBioCompany,
             onImportRewe = onImportRewe,
+            onImportEdeka = onImportEdeka,
             onOpenStoreSettings = onOpenStoreSettings,
             onDismiss = { addSheetOpen = false },
         )
@@ -337,6 +346,7 @@ private fun ReceiptFilter.matches(receipt: DigitalReceipt): Boolean = when (this
     ReceiptFilter.SCANNED -> receipt.source == ReceiptSource.CAPTURED
     ReceiptFilter.BIO_COMPANY -> receipt.source == ReceiptSource.BIO_COMPANY
     ReceiptFilter.REWE -> receipt.source == ReceiptSource.REWE
+    ReceiptFilter.EDEKA -> receipt.source == ReceiptSource.EDEKA
 }
 
 /**

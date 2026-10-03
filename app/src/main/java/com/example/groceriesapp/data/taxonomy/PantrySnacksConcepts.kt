@@ -84,10 +84,12 @@ internal val pantrySnacksConcepts: List<FoodConcept> = listOf(
         category = GroceryCategory.SNACKS_SWEETS,
         displayName = "Sweets",
         iconRes = R.drawable.ic_food_candy,
-        // "fruchtbumi" is an OCR misread of "Fruchtgummi" (g misread as b). "toffifee" is a brand
-        // whose name says nothing about what it is.
+        // "fruchtbumi" is an OCR misread of "Fruchtgummi" (g misread as b). "toffifee" and
+        // "haribo" are brands whose names say nothing about what they are; Haribo only ever sells
+        // fruit gums, so the brand alone is enough ("Fun Box Haribo").
         keywords = listOf(
             "bonbon", "gummibär", "fruchtgummi", "fruchtbumi", "lakritz", "phantasia", "toffifee",
+            "haribo",
         ),
     ),
     FoodConcept(

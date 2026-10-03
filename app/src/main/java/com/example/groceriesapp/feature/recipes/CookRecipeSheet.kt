@@ -25,7 +25,9 @@ import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -38,6 +40,7 @@ import com.example.groceriesapp.data.recipes.CookConsumption
 import com.example.groceriesapp.data.recipes.CookPlanner
 import com.example.groceriesapp.data.recipes.RecipeMatch
 import com.example.groceriesapp.data.taxonomy.resolveIconRes
+import com.example.groceriesapp.ui.components.StarRatingInput
 import com.example.groceriesapp.ui.formatAmount
 import com.example.groceriesapp.ui.formatQuantity
 import com.example.groceriesapp.ui.theme.spacing
@@ -65,8 +68,9 @@ private class CookRowState(
 fun CookRecipeSheet(
     match: RecipeMatch,
     onDismiss: () -> Unit,
-    onConfirm: (List<CookConsumption>) -> Unit,
+    onConfirm: (consumptions: List<CookConsumption>, rating: Int?) -> Unit,
 ) {
+    var rating by rememberSaveable { mutableStateOf<Int?>(null) }
     val rows = remember(match) {
         val itemsById = match.ingredientMatches
             .flatMap { it.matchedItems }
@@ -113,16 +117,23 @@ fun CookRecipeSheet(
             rows.forEach { row ->
                 CookRow(row)
             }
+            Text(
+                text = "How was it? (optional)",
+                style = MaterialTheme.typography.titleSmall,
+                modifier = Modifier.padding(top = MaterialTheme.spacing.small),
+            )
+            StarRatingInput(value = rating, onChange = { rating = it })
+            // Logging the cook is worth doing even when nothing in the inventory matched, so the
+            // button no longer waits for at least one included row.
             Button(
                 onClick = {
-                    onConfirm(rows.filter { it.included }.map { it.consumption })
+                    onConfirm(rows.filter { it.included }.map { it.consumption }, rating)
                 },
-                enabled = rows.any { it.included },
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = MaterialTheme.spacing.small),
             ) {
-                Text("Cooked · update inventory")
+                Text(if (rows.any { it.included }) "Cooked · update inventory" else "Cooked")
             }
         }
     }

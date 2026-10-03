@@ -22,9 +22,14 @@ class ReceiptProcessingPipeline(
     private val itemExtractor: ReceiptItemExtractor = RulesReceiptItemExtractor(),
     private val ocrRecognizer: ReceiptOcrRecognizer = MlKitReceiptOcrRecognizer(),
 ) {
+    /**
+     * @param singlePhoto marks an imported photo, which keeps its own orientation and may have no
+     * findable paper edges. See [PlanarReceiptStitcher.stitch].
+     */
     suspend fun process(
         session: ScanSession,
         framePaths: List<String>,
+        singlePhoto: Boolean = false,
         onPreviewReady: (String) -> Unit = {},
         onProgress: (ProcessingStage, Float) -> Unit,
     ): DigitalReceipt {
@@ -34,6 +39,7 @@ class ReceiptProcessingPipeline(
         val artifact = stitcher.stitch(
             frameFiles = framePaths.map(::File),
             outputDirectory = outputDirectory,
+            singlePhoto = singlePhoto,
             onProgress = { onProgress(ProcessingStage.STITCHING, it) },
         )
         onPreviewReady(artifact.previewPath)

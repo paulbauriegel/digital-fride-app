@@ -52,7 +52,9 @@ internal val produceConcepts: List<FoodConcept> = listOf(
         category = GroceryCategory.FRUIT,
         displayName = "Grapes",
         iconRes = R.drawable.ic_food_grapes,
-        keywords = listOf("traube", "traub"),
+        // "trau." is REWE's abbreviation for "Trauben" ("Trau. Rot KL Bio"). The trailing dot is
+        // load-bearing: bare "trau" would also sit inside "Traubensaft", which must stay JUICE.
+        keywords = listOf("traube", "traub", "trau."),
     ),
     FoodConcept(
         id = "STRAWBERRY",

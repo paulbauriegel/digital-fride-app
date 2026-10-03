@@ -26,7 +26,9 @@ import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.Kitchen
 import androidx.compose.material.icons.filled.LockOpen
+import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -50,6 +52,7 @@ import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -71,6 +74,7 @@ import androidx.compose.ui.unit.dp
 import com.example.groceriesapp.data.ConsumptionReason
 import com.example.groceriesapp.data.InventoryItem
 import com.example.groceriesapp.data.fillFraction
+import com.example.groceriesapp.data.isCountable
 import com.example.groceriesapp.data.household.Household
 import com.example.groceriesapp.data.taxonomy.ContainerType
 import com.example.groceriesapp.data.taxonomy.ExpirySource
@@ -123,7 +127,12 @@ fun EditInventoryItemScreen(
     onSetExpiryDate: (Long?) -> Unit,
     onSetAmount: (Double) -> Unit,
     onSetPackageSize: (Double?) -> Unit,
+    onSetHidden: (Boolean) -> Unit,
     onMarkOpened: () -> Unit,
+    /** Open the barcode scanner; the caller runs the Open Food Facts lookup it feeds. */
+    onScanBarcode: () -> Unit,
+    /** Split one piece off a multi-piece row and open just that one; see the repository docs. */
+    onOpenOne: () -> Unit,
     onRemove: (ConsumptionReason?) -> Unit,
     onMoveToHousehold: (String) -> Unit,
     modifier: Modifier = Modifier,
@@ -197,8 +206,15 @@ fun EditInventoryItemScreen(
                 item = item,
                 onSetAmount = onSetAmount,
                 onStartTracking = { onSetPackageSize(item.quantity) },
+                onOpenOne = onOpenOne,
                 onEditExactly = { showAmountDialog = true },
             )
+
+            SectionLabel("Barcode")
+            BarcodeRow(item = item, onScanBarcode = onScanBarcode)
+
+            SectionLabel("In the list")
+            HiddenRow(hidden = item.hidden, onSetHidden = onSetHidden)
 
             if (otherHouseholds.isNotEmpty()) {
                 SectionLabel("Household")
@@ -211,10 +227,16 @@ fun EditInventoryItemScreen(
                 horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small),
             ) {
                 if (item.openedAtEpochMillis == null) {
-                    OutlinedButton(onClick = onMarkOpened, modifier = Modifier.weight(1f)) {
+                    // Opening all pieces of a multi-pack at once is almost never what happened, so
+                    // the multi-piece row's button opens (and splits off) exactly one.
+                    val opensOneOfMany = item.hasSealedPieces
+                    OutlinedButton(
+                        onClick = if (opensOneOfMany) onOpenOne else onMarkOpened,
+                        modifier = Modifier.weight(1f),
+                    ) {
                         Icon(Icons.Default.LockOpen, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(MaterialTheme.spacing.extraSmall))
-                        Text("Mark as opened")
+                        Text(if (opensOneOfMany) "Open one" else "Mark as opened")
                     }
                 }
                 OutlinedButton(
@@ -539,11 +561,19 @@ private fun ExpirySection(
     }
 }
 
+/**
+ * True for a row holding several still-sealed pieces ("3 pc" of soy milk). What is opened —
+ * and what starts tracking its fill — should then be one piece, never the row as a whole.
+ */
+private val InventoryItem.hasSealedPieces: Boolean
+    get() = isCountable && quantity >= 2.0
+
 @Composable
 private fun AmountSection(
     item: InventoryItem,
     onSetAmount: (Double) -> Unit,
     onStartTracking: () -> Unit,
+    onOpenOne: () -> Unit,
     onEditExactly: () -> Unit,
 ) {
     val packageSize = item.packageSize
@@ -563,12 +593,22 @@ private fun AmountSection(
                     formatAmount(item.quantity, item.unit),
                     style = MaterialTheme.typography.headlineSmall,
                 )
-                Text(
-                    "This item isn't tracking how much is left.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Button(onClick = onStartTracking) { Text("Track how much is left") }
+                if (item.hasSealedPieces) {
+                    Text(
+                        "Opening one splits it into its own item, so you can track how much " +
+                            "of just that one is left.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Button(onClick = onOpenOne) { Text("Open one & track it") }
+                } else {
+                    Text(
+                        "This item isn't tracking how much is left.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Button(onClick = onStartTracking) { Text("Track how much is left") }
+                }
             }
         }
         return
@@ -678,6 +718,98 @@ private fun AmountPresets(
                 onClick = { onSetAmount(amount) },
                 label = { Text(label) },
             )
+        }
+    }
+}
+
+/**
+ * The pack's own barcode, and the way to read it off the packaging.
+ *
+ * Worth having on an item that already exists, not just on one being added: the rows that most
+ * need a name and a pack size are the ones that arrived from a receipt as "BAR. HAFERDRINK" with
+ * no amount, and the pack is usually still in the fridge. Linking the code also lets the next scan
+ * of the same product stack onto this row.
+ */
+@Composable
+private fun BarcodeRow(item: InventoryItem, onScanBarcode: () -> Unit) {
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onScanBarcode),
+    ) {
+        Row(
+            modifier = Modifier.padding(MaterialTheme.spacing.medium),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small),
+        ) {
+            Icon(
+                Icons.Default.QrCodeScanner,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = item.barcode ?: "Scan the barcode",
+                    style = MaterialTheme.typography.bodyLarge,
+                )
+                Text(
+                    text = if (item.barcode == null) {
+                        "Fill in the name and pack size from Open Food Facts"
+                    } else {
+                        "Scan again to look the product up"
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Icon(
+                Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+            )
+        }
+    }
+}
+
+/**
+ * The switch that moves this row into the inventory list's collapsed "Hidden" section. Worded
+ * around the list rather than the item, because nothing about the item itself changes — it still
+ * counts, still expires, and search still finds it.
+ */
+@Composable
+private fun HiddenRow(hidden: Boolean, onSetHidden: (Boolean) -> Unit) {
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onSetHidden(!hidden) },
+    ) {
+        Row(
+            modifier = Modifier.padding(MaterialTheme.spacing.medium),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small),
+        ) {
+            Icon(
+                Icons.Default.VisibilityOff,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Hide from the main list",
+                    style = MaterialTheme.typography.bodyLarge,
+                )
+                Text(
+                    text = "Hidden items sit in a collapsed section at the bottom of your " +
+                        "inventory — good for spices and staples that are always there.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Switch(checked = hidden, onCheckedChange = onSetHidden)
         }
     }
 }

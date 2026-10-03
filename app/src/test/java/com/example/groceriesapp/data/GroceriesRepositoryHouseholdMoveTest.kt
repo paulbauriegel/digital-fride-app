@@ -156,7 +156,9 @@ class GroceriesRepositoryHouseholdMoveTest {
     @Test
     fun aMovedItemKeepsEveryFieldRatherThanBeingReAdded() {
         val source = repository("default")
-        val added = source.addInventoryItem(item())
+        // Hidden, because that flag is written by the display layer rather than the import path
+        // and would be the easiest one for a move to drop.
+        val added = source.setInventoryItemHidden(source.addInventoryItem(item()).id, true)!!
 
         source.moveInventoryItemToHousehold(added.id, "second")
 

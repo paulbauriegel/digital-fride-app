@@ -86,6 +86,49 @@ object OpenAiRecipePrompts {
         append(inventoryPrompt)
     }
 
+    /**
+     * Structured generation: build around the selected items, honour preferences and time, and
+     * label each idea so the results screen can sort it into Best match / Quick & easy / High
+     * protein without a second model call.
+     */
+    fun generateUserContent(
+        request: RecipeGenerationRequest,
+        selectedPrompt: String,
+        inventoryPrompt: String,
+    ): String = buildString {
+        append("Suggest ${request.count} different recipes. Vary the style (e.g. pasta, soup, ")
+        append("salad, pan dish, oven bake).\n\n")
+        if (selectedPrompt.isNotBlank()) {
+            append("Build every recipe around these SELECTED items; each recipe must use at ")
+            append("least one of them as a main ingredient:\n")
+            append(selectedPrompt)
+            append("\n\n")
+        } else {
+            append("Cook primarily from the inventory, using up soon-to-expire items first.\n\n")
+        }
+        if (request.preferences.isNotEmpty()) {
+            append("Every recipe must be: ")
+            append(request.preferences.joinToString { it.promptText })
+            append(". Add the matching tags (")
+            append(request.preferences.joinToString { "\"${it.tag}\"" })
+            append(") to each recipe's tags.\n\n")
+        }
+        append("Cooking time: ${request.time.promptText}.")
+        request.time.maxMinutes?.let { append(" prepMinutes must be at most $it.") }
+        request.time.minMinutes?.let { append(" prepMinutes should be above $it.") }
+        append("\n\n")
+        if (request.freeText.isNotBlank()) {
+            append("Extra wishes from the user: ")
+            append(request.freeText.trim())
+            append("\n\n")
+        }
+        append("Set matchLabel per recipe: \"best\" for the one that uses the inventory best, ")
+        append("\"quick\" for anything ready in 30 minutes or less, \"protein\" for a ")
+        append("protein-rich dish, else \"none\".\n\n")
+        append("Inventory (conceptId | name | amount | location | expiry):\n")
+        append(inventoryPrompt)
+    }
+
     fun adaptUserContent(recipeJson: String, inventoryPrompt: String): String = """
         Adapt the following recipe so it uses only what this inventory offers. Substitute or drop
         what is missing, keep the spirit of the dish, and scale amounts to what is actually there
@@ -212,7 +255,7 @@ object OpenAiRecipePrompts {
                                 JSONArray(
                                     listOf(
                                         "title", "servings", "prepMinutes",
-                                        "tags", "ingredients", "steps",
+                                        "tags", "ingredients", "steps", "matchLabel",
                                     ),
                                 ),
                             )
@@ -286,11 +329,22 @@ object OpenAiRecipePrompts {
                                         JSONObject()
                                             .put("type", "array")
                                             .put("items", JSONObject().put("type", "string")),
+                                    )
+                                    // Strict schemas require every property, so "none" stands
+                                    // in for "no label" instead of making the field nullable.
+                                    .put(
+                                        "matchLabel",
+                                        JSONObject()
+                                            .put("type", "string")
+                                            .put("enum", JSONArray(MATCH_LABELS + "none")),
                                     ),
                             ),
                     ),
             ),
         )
+
+    /** Labels the model may attach; stored on the recipe as `ai:<label>` tags. */
+    val MATCH_LABELS: List<String> = listOf("best", "quick", "protein")
 
     /**
      * Parses a schema-constrained answer into [Recipe]s. Every conceptId is validated against the
@@ -355,7 +409,10 @@ object OpenAiRecipePrompts {
             prepMinutes = entry.optInt("prepMinutes", 30).coerceAtLeast(1),
             tags = entry.optJSONArray("tags")?.let { tags ->
                 List(tags.length()) { tags.optString(it) }.filter(String::isNotBlank)
-            }.orEmpty(),
+            }.orEmpty() + listOfNotNull(
+                // Older answers carry no label; anything outside the known set is ignored.
+                entry.optStringOrNull("matchLabel")?.takeIf { it in MATCH_LABELS }?.let { "ai:$it" },
+            ),
             imageRef = null,
             source = source,
             createdAtEpochMillis = createdAtEpochMillis,

@@ -108,6 +108,62 @@ class GroceriesRepositoryBarcodeTest {
         assertNull(reloaded.inventoryItemByBarcode("0000000000000"))
     }
 
+    @Test
+    fun `scanning from the editor links the code to that row and nothing else`() {
+        val repository = repository()
+        val receiptRow = repository.addInventoryItem(
+            InventoryItem(name = "BAR. HAFERDRINK", quantity = 1.0, unit = "l"),
+        )
+        val other = repository.addInventoryItem(
+            InventoryItem(name = "Butter", quantity = 1.0, unit = "pc"),
+        )
+
+        assertEquals(EAN, repository.setInventoryItemBarcode(receiptRow.id, EAN)?.barcode)
+
+        val reloaded = repository()
+        assertEquals(receiptRow.id, reloaded.inventoryItemByBarcode(EAN)?.id)
+        assertNull(reloaded.inventory.value.first { it.id == other.id }.barcode)
+    }
+
+    @Test
+    fun `a row that learned its barcode in the editor is what the next scan stacks onto`() {
+        val repository = repository()
+        val existing = repository.addInventoryItem(
+            InventoryItem(name = "BAR. HAFERDRINK", quantity = 1.0, unit = "l", purchasedAtEpochMillis = today),
+        )
+        repository.setInventoryItemBarcode(existing.id, EAN)
+
+        repository.addInventoryItem(
+            InventoryItem(
+                name = "Alnatura Haferdrink Natur",
+                quantity = 1.0,
+                unit = "l",
+                barcode = EAN,
+                purchasedAtEpochMillis = today,
+            ),
+        )
+
+        val items = repository.inventory.value
+        assertEquals(1, items.size)
+        assertEquals(existing.id, items.single().id)
+        assertEquals(2.0, items.single().quantity, 0.001)
+    }
+
+    @Test
+    fun `linking a barcode leaves every other field alone`() {
+        val repository = repository()
+        val existing = repository.addInventoryItem(
+            InventoryItem(name = "Haferdrink", quantity = 0.4, unit = "l", packageSize = 1.0),
+        )
+
+        val linked = repository.setInventoryItemBarcode(existing.id, EAN)
+
+        assertEquals(existing.copy(barcode = EAN), linked)
+        // A code the row already carries is not a change, so it does not rewrite the index.
+        assertEquals(linked, repository.setInventoryItemBarcode(existing.id, EAN))
+        assertNull(repository.setInventoryItemBarcode("no-such-item", EAN))
+    }
+
     private companion object {
         const val EAN = "4008400202020"
     }
