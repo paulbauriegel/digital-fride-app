@@ -13,6 +13,13 @@ val localProperties = Properties().apply {
     if (file.exists()) file.inputStream().use { load(it) }
 }
 
+// Release signing (upload key). keystore.properties (gitignored) holds storeFile, storePassword,
+// keyAlias and keyPassword; CI writes it from repository secrets. Without it release builds stay unsigned.
+val keystoreProperties = Properties().apply {
+    val file = rootProject.file("keystore.properties")
+    if (file.exists()) file.inputStream().use { load(it) }
+}
+
 fun privateValue(localKey: String, envKey: String): String =
     localProperties.getProperty(localKey)
         ?: providers.gradleProperty(localKey).orNull
@@ -24,11 +31,15 @@ android {
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.example.groceriesapp"
+        // The Kotlin namespace stays com.example.groceriesapp; only the installed app id changed.
+        applicationId = "de.bauriegel.digitalfridge"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+        // CI passes -Pgroceries.versionCode=<run number> (and versionName from a v* tag).
+        versionCode = providers.gradleProperty("groceries.versionCode").map(String::toInt).getOrElse(1)
+        versionName = providers.gradleProperty("groceries.versionName").getOrElse("1.0")
+        // The bundled llama.cpp runtime is arm64-only; this also drops the other ABIs of OpenCV, ML Kit and LiteRT.
+        ndk { abiFilters += "arm64-v8a" }
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -37,8 +48,27 @@ android {
         buildConfigField("String", "BIOCOMPANY_AES_IV", "\"${privateValue("biocompany.aesIv", "BIOCOMPANY_AES_IV")}\"")
     }
 
+    signingConfigs {
+        if (keystoreProperties.isNotEmpty()) {
+            create("release") {
+                storeFile = rootProject.file(keystoreProperties.getProperty("storeFile"))
+                storePassword = keystoreProperties.getProperty("storePassword")
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
+        // Debuggable, but signed with the release key: lets `adb run-as` restore app data into an
+        // install that a signed release can later update in place (see README, "Moving data").
+        create("bridge") {
+            initWith(getByName("debug"))
+            signingConfigs.findByName("release")?.let { signingConfig = it }
+            matchingFallbacks += "debug"
+        }
         release {
+            signingConfigs.findByName("release")?.let { signingConfig = it }
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),

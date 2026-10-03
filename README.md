@@ -1,5 +1,7 @@
 # My Fridge
 
+[![Android](https://github.com/paulbauriegel/digital-fride-app/actions/workflows/android.yml/badge.svg)](https://github.com/paulbauriegel/digital-fride-app/actions/workflows/android.yml)
+
 An offline-first Android app that turns a freely recorded, AR-tracked view of a receipt into one
 continuous digital grocery receipt, then lets the user review recognized groceries before adding
 them to a local fridge inventory.
@@ -70,6 +72,77 @@ The debug APK is written to:
 ```text
 app/build/outputs/apk/debug/app-debug.apk
 ```
+
+The installed app id is `de.bauriegel.digitalfridge`. The Kotlin namespace and package stay
+`com.example.groceriesapp`. Builds include only the `arm64-v8a` ABI, because the bundled llama.cpp
+runtime exists only for arm64.
+
+### Private build values
+
+`local.properties` (gitignored) can hold values that must not be in the public source:
+
+```properties
+biocompany.aesKey=<32 hex characters>
+biocompany.aesIv=<32 hex characters>
+```
+
+They can also come from Gradle properties of the same name, or from the environment variables
+`BIOCOMPANY_AES_KEY` and `BIOCOMPANY_AES_IV`; CI uses the latter. Without them, everything works
+except the Bio Company card-points call, which then reports that it is unavailable.
+
+### Release builds
+
+Release and `bridge` builds are signed with the upload key named in `keystore.properties` (gitignored)
+at the repo root:
+
+```properties
+storeFile=/path/to/upload.jks
+storePassword=…
+keyAlias=upload
+keyPassword=…
+```
+
+Without that file the release APK stays unsigned. `-Pgroceries.versionCode=N` and
+`-Pgroceries.versionName=X` override the version, which CI does.
+
+## Continuous integration
+
+`.github/workflows/android.yml` runs on every push, every pull request and by hand:
+
+- It runs the unit tests and Android lint. Lint only reports for now and doesn't fail the build.
+- It builds a debug APK and a release APK, plus an AAB when signing secrets are set.
+- It uploads them as the `digital-fridge-apk-<run>` artifact, kept for 30 days.
+
+Pushing a `v*` tag also creates a GitHub release with the APKs attached, using the tag as
+`versionName`. `versionCode` is the workflow run number, so later CI builds can update earlier ones.
+
+Repository secrets:
+
+| Secret | Purpose |
+|--------|---------|
+| `ANDROID_KEYSTORE_BASE64` | `base64 -i upload.jks` |
+| `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD` | upload key |
+| `BIOCOMPANY_AES_KEY`, `BIOCOMPANY_AES_IV` | Bio Company card points (optional) |
+
+## Moving data to a differently signed install
+
+All data lives in app-private storage with no cloud backup, and Android lets `adb run-as` write
+into it only on debuggable builds. To move receipts and inventory into an install that a signed
+release will later update (for example from the old `com.example.groceriesapp` debug app to
+`de.bauriegel.digitalfridge`):
+
+1. **Back up** the source app:
+   `adb exec-out run-as <old id> sh -c 'tar cf - files/groceries shared_prefs 2>/dev/null' > backup.tar`.
+   Check the archive with `tar tf backup.tar`.
+2. **Install the bridge build:** `./gradlew assembleBridge`, then
+   `adb install -r app/build/outputs/apk/bridge/app-bridge.apk`. It is debuggable but signed with the
+   release key.
+3. **Restore before the first launch:**
+   `adb exec-in run-as de.bauriegel.digitalfridge tar xf - < backup.tar`.
+   - Encrypted preferences are bound to the old app's Keystore keys and can't be moved. Re-enter the
+     OpenAI key, the REWE certificate and the store logins.
+4. **Update to the signed release** with `adb install -r`. The release must have a versionCode at
+   least as high as the bridge build's. Because the signing key is the same, the data stays.
 
 ## Models
 
