@@ -1,8 +1,23 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
 }
+
+// Values that must not be in the public source: local.properties (gitignored) first, then a Gradle
+// property, then an environment variable (GitHub secrets in CI). Missing values become "".
+val localProperties = Properties().apply {
+    val file = rootProject.file("local.properties")
+    if (file.exists()) file.inputStream().use { load(it) }
+}
+
+fun privateValue(localKey: String, envKey: String): String =
+    localProperties.getProperty(localKey)
+        ?: providers.gradleProperty(localKey).orNull
+        ?: providers.environmentVariable(envKey).orNull
+        ?: ""
 
 android {
     namespace = "com.example.groceriesapp"
@@ -17,6 +32,9 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
+        // Bio Company app cipher (hex). Without it the card-points call reports that it is unavailable.
+        buildConfigField("String", "BIOCOMPANY_AES_KEY", "\"${privateValue("biocompany.aesKey", "BIOCOMPANY_AES_KEY")}\"")
+        buildConfigField("String", "BIOCOMPANY_AES_IV", "\"${privateValue("biocompany.aesIv", "BIOCOMPANY_AES_IV")}\"")
     }
 
     buildTypes {

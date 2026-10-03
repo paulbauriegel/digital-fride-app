@@ -12,6 +12,8 @@ __pycache__/
 benchmarks/ocr/results/
 benchmarks/ocr/reference/
 benchmarks/ocr/.venv/
+# Personal receipt photos and the OCR references made from them
+benchmarks/ocr/private/
 tools/glm_ocr_litert/output/
 
 # Keep the patched llama.cpp Vulkan source and reproducible build recipe.
@@ -26,3 +28,17 @@ tools/glm_ocr_litert/output/
 !/build/third_party/llama.cpp-b10167/source.tar.gz
 !/build/third_party/llama.cpp-b10167/vulkan-api26.patch
 /build/third_party/llama.cpp-b10167/source.tar.gz
+
+# Secrets and signing (see README, "Release builds")
+keystore.properties
+*.jks
+*.keystore
+*.p12
+*.pem
+.env
+.claude/settings.local.json
+
+# Model files are downloaded by the app or published to Hugging Face, never committed
+*.gguf
+*.tflite
+*.litertlm

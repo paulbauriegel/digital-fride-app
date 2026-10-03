@@ -1,6 +1,7 @@
 package com.example.groceriesapp.data.network
 
 import android.util.Log
+import com.example.groceriesapp.BuildConfig
 import okhttp3.HttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -21,17 +22,18 @@ class BioCompanyApiClient {
     companion object {
         private const val TAG = "BioCompanyApi"
         private const val BASE_URL = "https://connect.biocompany.de/"
-        // AES-128-CBC: key = REDACTED iv = REDACTED
-        private val CIPHER_KEY = ByteArray(16) // removed from the public history, 0x37.toByte(), 0x78.toByte(), 0x21.toByte(),
-            0x41.toByte(), 0x25.toByte(), 0x44.toByte(), 0x2A.toByte(),
-            0x47.toByte(), 0x2D.toByte(), 0x4B.toByte(), 0x61.toByte(),
-            0x50.toByte(), 0x64.toByte(), 0x53.toByte(), 0x61.toByte(),
-        )
-        private val CIPHER_IV = ByteArray(16) // removed from the public history, 0x24.toByte(), 0x42.toByte(), 0x26.toByte(),
-            0x45.toByte(), 0x29.toByte(), 0x48.toByte(), 0x40.toByte(),
-            0x4D.toByte(), 0x63.toByte(), 0x51.toByte(), 0x66.toByte(),
-            0x54.toByte(), 0x6A.toByte(), 0x57.toByte(), 0x6E.toByte(),
-        )
+        // AES-128-CBC key and IV of the Bio Company app API. They are not part of the public source:
+        // the build reads them from local.properties (biocompany.aesKey / biocompany.aesIv, hex) or
+        // the BIOCOMPANY_AES_KEY / BIOCOMPANY_AES_IV environment variables (GitHub secrets in CI).
+        private val CIPHER_KEY: ByteArray? = hexOrNull(BuildConfig.BIOCOMPANY_AES_KEY)
+        private val CIPHER_IV: ByteArray? = hexOrNull(BuildConfig.BIOCOMPANY_AES_IV)
+
+        /** False in builds made without the key, e.g. a fork or a CI run without secrets. */
+        val isConfigured: Boolean get() = CIPHER_KEY != null && CIPHER_IV != null
+
+        private fun hexOrNull(hex: String): ByteArray? =
+            hex.takeIf { it.length == 32 && it.all { c -> c.isDigit() || c.lowercaseChar() in 'a'..'f' } }
+                ?.chunked(2)?.map { it.toInt(16).toByte() }?.toByteArray()
     }
 
     private val client = OkHttpClient.Builder()
@@ -267,8 +269,13 @@ class BioCompanyApiClient {
     }
 
     private fun encryptCustomerNumber(customerNumber: String): String {
-        val ivSpec = IvParameterSpec(CIPHER_IV)
-        val keySpec = SecretKeySpec(CIPHER_KEY, "AES")
+        val key = CIPHER_KEY
+        val iv = CIPHER_IV
+        if (key == null || iv == null) {
+            throw IOException("Bio Company card points are not available in this build (no API key configured)")
+        }
+        val ivSpec = IvParameterSpec(iv)
+        val keySpec = SecretKeySpec(key, "AES")
         val cipher = Cipher.getInstance("AES/CBC/PKCS5Padding")
         cipher.init(Cipher.ENCRYPT_MODE, keySpec, ivSpec)
         val encrypted = cipher.doFinal(customerNumber.toByteArray(StandardCharsets.UTF_8))

@@ -60,6 +60,7 @@ class OpenFoodFactsClient(
             "brands,quantity,product_quantity,product_quantity_unit"
 
         const val MAX_BYTES = 256L * 1024
+        // Open Food Facts asks clients to identify themselves with a contact; the project page serves as one.
         const val USER_AGENT = "GroceriesApp/1.0 (Android; https://github.com/paulbauriegel/digital-fride-app)"
     }
 }

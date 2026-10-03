@@ -24,21 +24,24 @@ Each timestamped directory under `benchmarks/ocr/results/` contains:
 
 Generated result directories are ignored by Git.
 
-## Saved ML Kit reference
+## Fixtures and the saved ML Kit reference
 
-The saved ML Kit output previously produced on the Android phone for the same receipt is stored
-under:
+Receipt photos are personal data, so they are not in Git. Put them into the ignored
+`benchmarks/ocr/private/` folder. The scripts default to
+`private/hellweg_b3febdc3_edited_preview.jpg`; pass another image on the command line otherwise.
 
-```text
-benchmarks/ocr/references/mlkit/hellweg_b3febdc3_edited_preview/
-```
+The saved ML Kit output previously produced on the Android phone for the same receipt lives next to
+it, under `benchmarks/ocr/private/references/mlkit/hellweg_b3febdc3_edited_preview/`:
 
-`input.jpg` is the exact original stitched tile passed to ML Kit, `raw.txt` is the saved OCR text,
-and `report.json` records the ML Kit dependency, receipt and device provenance, input hashes, region
-count, and mean region confidence. The separate default benchmark fixture is a later rotated and
-cropped edit of the same receipt, so compare against `input.jpg` for strict same-pixel accuracy or
-against the default fixture only as a same-receipt quality reference. The app did not retain
-inference timing for that run, so the reference deliberately contains no timing estimate.
+- `input.jpg` is the exact original stitched tile passed to ML Kit.
+- `raw.txt` is the saved OCR text.
+- `report.json` records the ML Kit dependency, receipt and device provenance, input hashes, region
+  count, and mean region confidence.
+
+The default fixture is a later rotated and cropped edit of the same receipt. Compare against
+`input.jpg` for strict same-pixel accuracy, or against the default fixture only as a same-receipt
+quality reference. The app did not retain inference timing for that run, so the reference
+deliberately contains no timing estimate.
 
 ## Useful options
 

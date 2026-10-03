@@ -1,34 +1,35 @@
 package com.example.groceriesapp.data.recipes
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Test
 
 /**
- * Runs the parser against a real, unmodified recipe page captured from the web, rather than the
- * hand-written JSON-LD in [RecipeJsonLdTest]. Synthetic fixtures only prove the parser handles the
- * shapes I thought of; this proves it survives a production page — minified markup, a 600 KB body,
- * unrelated JSON-LD nodes, HTML inside step text, and entity-encoded fractions.
+ * Runs the parser against a whole recipe page rather than the bare JSON-LD in [RecipeJsonLdTest]:
+ * minified markup with scripts and styles, several JSON-LD blocks (an Organization next to an
+ * @graph holding WebSite, BreadcrumbList and the Recipe), HTML inside step text, and entity-encoded
+ * fractions and dashes. The page is synthetic (written for this project) so it can be published.
  *
  * The fixture is checked in so the test is hermetic and never touches the network.
  */
-class RecipeJsonLdRealPageTest {
+class RecipeJsonLdPageTest {
 
     private fun fixture(): String? = javaClass.classLoader
-        ?.getResourceAsStream("real_recipe_page.html")
+        ?.getResourceAsStream("recipe_page.html")
         ?.bufferedReader()
         ?.use { it.readText() }
 
     @Test
-    fun `extracts a usable recipe from a real page`() {
+    fun `extracts a usable recipe from a full page`() {
         val html = fixture()
         assumeTrue("fixture missing", html != null)
         requireNotNull(html)
 
         val recipe = RecipeJsonLd.parseFromHtml(html, createdAtEpochMillis = 1L)
-        requireNotNull(recipe) { "no recipe parsed from the real page" }
+        requireNotNull(recipe) { "no recipe parsed from the page" }
 
-        assertTrue("title was blank", recipe.title.isNotBlank())
+        assertEquals("Red lentil and tomato soup", recipe.title)
         assertTrue("expected several ingredients", recipe.ingredients.size >= 5)
         assertTrue("expected several steps", recipe.steps.size >= 3)
         assertTrue("servings out of range", recipe.servings in 1..100)

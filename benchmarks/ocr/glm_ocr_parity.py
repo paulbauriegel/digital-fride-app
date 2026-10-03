@@ -20,7 +20,8 @@ import numpy as np
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-DEFAULT_IMAGE = SCRIPT_DIR / "fixtures" / "hellweg_b3febdc3_edited_preview.jpg"
+# Personal receipt photos stay out of Git: put fixtures into the ignored private/ folder (see README).
+DEFAULT_IMAGE = SCRIPT_DIR / "private" / "hellweg_b3febdc3_edited_preview.jpg"
 DEFAULT_OUTPUT_ROOT = SCRIPT_DIR / "reference"
 DEFAULT_MLX_MODEL = "mlx-community/GLM-OCR-bf16"
 DEFAULT_HF_MODEL = "zai-org/GLM-OCR"
