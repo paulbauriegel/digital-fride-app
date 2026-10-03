@@ -78,6 +78,7 @@ import com.example.groceriesapp.ui.components.SettingsRow
 import com.example.groceriesapp.ui.components.SettingsRowDivider
 import com.example.groceriesapp.ui.components.SettingsSectionHeader
 import com.example.groceriesapp.ui.theme.spacing
+import com.example.groceriesapp.vision.models.DownloadableModel
 import com.example.groceriesapp.vision.ocr.GlmOcrModelManager
 import com.example.groceriesapp.vision.ocr.GlmOcrModelState
 import com.example.groceriesapp.vision.ocr.GlmOcrLiteRtModelManager
@@ -132,10 +133,16 @@ fun SettingsScreen(
     val context = LocalContext.current
     val modelManager = remember(context) { GlmOcrModelManager(context) }
     val liteRtModelManager = remember(context) { GlmOcrLiteRtModelManager(context) }
-    val modelState = remember { modelManager.state() }
-    val liteRtModelState = remember { liteRtModelManager.state() }
     val graniteModelManager = remember(context) { GraniteModelManager(context) }
-    val graniteModelState = remember { graniteModelManager.state() }
+    var modelState by remember { mutableStateOf(modelManager.state()) }
+    var liteRtModelState by remember { mutableStateOf(liteRtModelManager.state()) }
+    var graniteModelState by remember { mutableStateOf(graniteModelManager.state()) }
+    // Re-read the managers after a model download finished or its files were deleted.
+    val refreshModels = {
+        modelState = modelManager.state()
+        liteRtModelState = liteRtModelManager.state()
+        graniteModelState = graniteModelManager.state()
+    }
     val openAiKeyStore = remember(context) { OpenAiKeyStore(context) }
     var openAiKeyPresent by remember(openAiKeyStore) { mutableStateOf(openAiKeyStore.hasKey()) }
     val coroutineScope = rememberCoroutineScope()
@@ -270,11 +277,13 @@ fun SettingsScreen(
                     onOcrEngineChanged = onOcrEngineChanged,
                     modelState = modelState,
                     liteRtModelState = liteRtModelState,
+                    onModelsChanged = refreshModels,
                 )
                 SettingsDetail.ITEM_EXTRACTION -> ItemExtractionDetail(
                     engine = itemExtractionEngine,
                     onEngineChanged = onItemExtractionEngineChanged,
                     graniteState = graniteModelState,
+                    onModelsChanged = refreshModels,
                     openAiKeyPresent = openAiKeyPresent,
                     openAiTextModel = openAiKeyStore.textModel(),
                     onOpenOpenAiSettings = { detail = SettingsDetail.OPENAI },
@@ -858,6 +867,7 @@ private fun TextRecognitionDetail(
     onOcrEngineChanged: (OcrEngine) -> Unit,
     modelState: GlmOcrModelState,
     liteRtModelState: GlmOcrLiteRtModelState,
+    onModelsChanged: () -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small)) {
         OcrEngineCard(
@@ -872,28 +882,28 @@ private fun TextRecognitionDetail(
             selected = ocrEngine == OcrEngine.GLM_OCR,
             enabled = modelState.ready,
             description = if (modelState.ready) {
-                "Higher-quality generative OCR using the bundled GGUF models."
+                "Higher-quality generative OCR using the downloaded GGUF models."
             } else {
-                "Not installed on this device yet."
+                "Download the model below to use it."
             },
             onSelect = { onOcrEngineChanged(OcrEngine.GLM_OCR) },
         )
-        if (ocrEngine == OcrEngine.GLM_OCR) {
-            GlmOcrModelCard(state = modelState)
+        if (ocrEngine == OcrEngine.GLM_OCR || !modelState.ready) {
+            GlmOcrModelCard(state = modelState, onModelsChanged = onModelsChanged)
         }
         OcrEngineCard(
             engine = OcrEngine.GLM_OCR_LITERT,
             selected = ocrEngine == OcrEngine.GLM_OCR_LITERT,
             enabled = liteRtModelState.ready,
             description = if (liteRtModelState.ready) {
-                "Experimental GLM-OCR using the bundled LiteRT vision and decoder models."
+                "Experimental GLM-OCR using the downloaded LiteRT vision and decoder models."
             } else {
-                "Not installed on this device yet."
+                "Download the model below to use it."
             },
             onSelect = { onOcrEngineChanged(OcrEngine.GLM_OCR_LITERT) },
         )
-        if (ocrEngine == OcrEngine.GLM_OCR_LITERT) {
-            GlmOcrLiteRtModelCard(state = liteRtModelState)
+        if (ocrEngine == OcrEngine.GLM_OCR_LITERT || !liteRtModelState.ready) {
+            GlmOcrLiteRtModelCard(state = liteRtModelState, onModelsChanged = onModelsChanged)
         }
     }
 }
@@ -1004,6 +1014,7 @@ private fun ItemExtractionDetail(
     engine: ItemExtractionEngine,
     onEngineChanged: (ItemExtractionEngine) -> Unit,
     graniteState: GraniteModelState,
+    onModelsChanged: () -> Unit,
     openAiKeyPresent: Boolean,
     openAiTextModel: String,
     onOpenOpenAiSettings: () -> Unit,
@@ -1022,15 +1033,15 @@ private fun ItemExtractionDetail(
             description = if (graniteState.ready) {
                 "On-device Granite 4.0 350M language model via LiteRT-LM."
             } else {
-                "Not installed on this device yet."
+                "Download the model below to use it."
             },
             icon = Icons.Default.AutoAwesome,
             selected = engine == ItemExtractionEngine.GRANITE,
             enabled = graniteState.ready,
             onSelect = { onEngineChanged(ItemExtractionEngine.GRANITE) },
         )
-        if (engine == ItemExtractionEngine.GRANITE) {
-            GraniteModelCard(state = graniteState)
+        if (engine == ItemExtractionEngine.GRANITE || !graniteState.ready) {
+            GraniteModelCard(state = graniteState, onModelsChanged = onModelsChanged)
         }
         EngineRadioCard(
             title = ItemExtractionEngine.OPENAI.displayName,
@@ -1064,7 +1075,7 @@ private fun ItemExtractionDetail(
 }
 
 @Composable
-private fun GraniteModelCard(state: GraniteModelState) {
+private fun GraniteModelCard(state: GraniteModelState, onModelsChanged: () -> Unit) {
     Card(
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainer,
@@ -1076,8 +1087,7 @@ private fun GraniteModelCard(state: GraniteModelState) {
         ) {
             Text("Granite model file", style = MaterialTheme.typography.titleMedium)
             Text(
-                "The Granite 4.0 350M .litertlm file is provisioned with the app and can't be " +
-                    "changed on-device.",
+                "The Granite 4.0 350M .litertlm file is downloaded once and stays on this device.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -1086,6 +1096,7 @@ private fun GraniteModelCard(state: GraniteModelState) {
                 name = state.modelName,
                 sizeBytes = state.modelSizeBytes,
             )
+            ModelDownloadSection(DownloadableModel.GRANITE, ready = state.ready, onModelsChanged = onModelsChanged)
         }
     }
 }
@@ -1383,7 +1394,7 @@ private fun OpenAiUsageRow(title: String, description: String) {
 }
 
 @Composable
-private fun GlmOcrModelCard(state: GlmOcrModelState) {
+private fun GlmOcrModelCard(state: GlmOcrModelState, onModelsChanged: () -> Unit) {
     Card(
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainer,
@@ -1395,8 +1406,7 @@ private fun GlmOcrModelCard(state: GlmOcrModelState) {
         ) {
             Text("GLM-OCR model files", style = MaterialTheme.typography.titleMedium)
             Text(
-                "The GGUF decoder and mmproj pair are provisioned with the app and can't be " +
-                    "changed on-device.",
+                "The GGUF decoder and mmproj pair are downloaded once and stay on this device.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -1410,6 +1420,7 @@ private fun GlmOcrModelCard(state: GlmOcrModelState) {
                 name = state.projectorName,
                 sizeBytes = state.projectorSizeBytes,
             )
+            ModelDownloadSection(DownloadableModel.GLM_OCR, ready = state.modelsReady, onModelsChanged = onModelsChanged)
             if (!state.runtimeAvailable) {
                 Text(
                     "The bundled GLM-OCR runtime requires an arm64 Android device.",
@@ -1428,7 +1439,7 @@ private fun GlmOcrModelCard(state: GlmOcrModelState) {
 }
 
 @Composable
-private fun GlmOcrLiteRtModelCard(state: GlmOcrLiteRtModelState) {
+private fun GlmOcrLiteRtModelCard(state: GlmOcrLiteRtModelState, onModelsChanged: () -> Unit) {
     Card(
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainer,
@@ -1440,8 +1451,8 @@ private fun GlmOcrLiteRtModelCard(state: GlmOcrLiteRtModelState) {
         ) {
             Text("GLM-OCR LiteRT files", style = MaterialTheme.typography.titleMedium)
             Text(
-                "The fixed 644 × 952 vision encoder and cached decoder are provisioned with the " +
-                    "app and can't be changed on-device. First use can take several minutes.",
+                "The fixed 644 × 952 vision encoder and cached decoder are downloaded once and stay " +
+                    "on this device. First use can take several minutes.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -1455,6 +1466,7 @@ private fun GlmOcrLiteRtModelCard(state: GlmOcrLiteRtModelState) {
                 name = state.decoderSizeBytes?.let { GlmOcrLiteRtModelManager.DECODER_FILE },
                 sizeBytes = state.decoderSizeBytes,
             )
+            ModelDownloadSection(DownloadableModel.GLM_OCR_LITERT, ready = state.ready, onModelsChanged = onModelsChanged)
             Text(
                 "LiteRT output has no line boxes, so receipt highlighting is unavailable.",
                 style = MaterialTheme.typography.bodySmall,

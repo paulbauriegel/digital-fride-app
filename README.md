@@ -71,27 +71,57 @@ The debug APK is written to:
 app/build/outputs/apk/debug/app-debug.apk
 ```
 
-## GLM-OCR setup
+## Models
 
-ML Kit remains the default and works without setup. To use GLM-OCR, open **More → Text
-recognition**, import both matching files from
-[`ggml-org/GLM-OCR-GGUF`](https://huggingface.co/ggml-org/GLM-OCR-GGUF), then select GLM-OCR:
+ML Kit text recognition and the built-in receipt rules work without any download. The other engines
+need model files. Download them from **Settings → Text recognition** or **Settings → Item
+extraction**. Each model card has a Download button with progress, Cancel and Delete. Downloads:
 
-- `GLM-OCR-Q8_0.gguf`
-- `mmproj-GLM-OCR-Q8_0.gguf`
+- run in the background with a notification;
+- wait for Wi-Fi unless "Download over Wi-Fi only" is switched off;
+- resume after a dropped connection;
+- are checked against their sha256 before they are used.
 
-The files are copied to app-private storage and inference stays offline. The official Q8 pair uses
-about 1.43 GB of device storage. The app packages an arm64 Vulkan runtime built from llama.cpp
-release `b10167`. GLM-OCR first offloads the decoder and multimodal projector to Vulkan, then
-automatically retries on CPU if the device has no compatible Vulkan backend or GPU initialization
-fails. ML Kit remains available on every supported device. GLM-OCR returns plain text without
-positioned line boxes, so receipt highlighting is unavailable for GLM-OCR output.
+| Model | Size | Downloaded from | Licence |
+|-------|------|-----------------|---------|
+| GLM-OCR (llama.cpp): `GLM-OCR-Q8_0.gguf` + `mmproj-GLM-OCR-Q8_0.gguf` | 1.43 GB | [ggml-org/GLM-OCR-GGUF](https://huggingface.co/ggml-org/GLM-OCR-GGUF) | MIT |
+| GLM-OCR LiteRT (experimental): vision encoder + cached decoder | 3.27 GB | [paulbauriegel/digital-fridge-models](https://huggingface.co/paulbauriegel/digital-fridge-models) (our conversion) | MIT |
+| Granite 4.0 350M (LiteRT-LM) | 468 MB | [litert-community/granite-4.0-350m-litert-lm](https://huggingface.co/litert-community/granite-4.0-350m-litert-lm) | Apache-2.0 |
+
+`app/src/main/assets/model_catalog.json` lists every file with a URL pinned to a commit, its sha256
+and size, and where the app stores it (`filesDir/models/…`, the paths the model managers check). The
+app refreshes the catalog from the model repo at most once a day. Model files that are already on
+the device, for example copied there with `adb`, are recognised and not downloaded again.
+
+The app packages an arm64 Vulkan runtime built from llama.cpp release `b10167`:
+
+- GLM-OCR first offloads the decoder and the multimodal projector to Vulkan.
+- If the device has no compatible Vulkan backend, or GPU initialisation fails, it retries on the CPU.
+- GLM-OCR returns plain text without positioned line boxes, so receipt highlighting is unavailable
+  for its output.
 
 The experimental LiteRT engine currently executes the vision signatures and cached decoder on CPU.
 An instrumented `litert_gpu` benchmark path uses LiteRT's OpenCL `CompiledModel` backend, but it is
 not selected by the app because Pixel 7 Pro parity runs produced materially different vision
 embeddings even when only one transformer block was delegated. GPU initialization or delegated-op
 counts alone are therefore not treated as successful OCR.
+
+
+## Publishing models
+
+`tools/models/publish_models.py` (run with `uv run tools/models/publish_models.py`) does the
+following:
+
+- Checks the LiteRT conversion in `build/glm-ocr-litert/` against its conversion manifest.
+- Uploads it to [paulbauriegel/digital-fridge-models](https://huggingface.co/paulbauriegel/digital-fridge-models)
+  in one commit, together with the conversion script, the manifest, a licence and a model card.
+- Writes `catalog.json` to that repo and to the app's bundled `model_catalog.json`.
+
+The GGUF pair and Granite are not re-hosted; the catalog pins their upstream commits, and their
+sha256 values come from the Hub's metadata. Re-running uploads nothing unless a file changed. To move
+to a new upstream revision, bump `GGUF_REVISION` or `GRANITE_REVISION` in the script and rerun.
+`--dry-run` only rewrites the bundled catalog. You need a Hugging Face write token
+(`hf auth login`).
 
 ## Validation boundary
 

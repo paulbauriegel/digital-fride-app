@@ -1,0 +1,64 @@
+{
+  "formatVersion": 1,
+  "models": [
+    {
+      "id": "glm_ocr",
+      "name": "GLM-OCR (llama.cpp)",
+      "license": "MIT",
+      "source": "https://huggingface.co/ggml-org/GLM-OCR-GGUF",
+      "files": [
+        {
+          "url": "https://huggingface.co/ggml-org/GLM-OCR-GGUF/resolve/65a42de1148dbed2297e922b5dbc7d9b70c36578/GLM-OCR-Q8_0.gguf",
+          "sha256": "45bc244a6446aff850521dc41f18bc8d7105ad5f0c2c8c28af04e7cc4f4d50b1",
+          "bytes": 950433408,
+          "destDir": "models/glm-ocr",
+          "destName": "GLM-OCR.gguf"
+        },
+        {
+          "url": "https://huggingface.co/ggml-org/GLM-OCR-GGUF/resolve/65a42de1148dbed2297e922b5dbc7d9b70c36578/mmproj-GLM-OCR-Q8_0.gguf",
+          "sha256": "9c4b58e33e316ed142eb5dcb41abec3844d3e6e5dc361ffb782c3fa9d175141f",
+          "bytes": 484403648,
+          "destDir": "models/glm-ocr",
+          "destName": "mmproj-GLM-OCR.gguf"
+        }
+      ]
+    },
+    {
+      "id": "glm_ocr_litert",
+      "name": "GLM-OCR LiteRT (experimental)",
+      "license": "MIT",
+      "source": "https://huggingface.co/paulbauriegel/digital-fridge-models",
+      "files": [
+        {
+          "url": "https://huggingface.co/paulbauriegel/digital-fridge-models/resolve/aa5861b5542e3f74504c9b201c096859c121e21e/glm-ocr-litert/glm_ocr_vision_68x46_fp32.tflite",
+          "sha256": "56a9ee02baa83e8966e4f3ee49420fb19d5845e9aba15a64528a1af384103258",
+          "bytes": 1738830368,
+          "destDir": "models/glm-ocr-litert",
+          "destName": "glm_ocr_vision_68x46_fp32.tflite"
+        },
+        {
+          "url": "https://huggingface.co/paulbauriegel/digital-fridge-models/resolve/aa5861b5542e3f74504c9b201c096859c121e21e/glm-ocr-litert/glm_ocr_multimodal_decoder_combined_fp16.tflite",
+          "sha256": "de1f3dfca64ad057e3f7dc3ee5f788192d78f06b619155d258aba21fc47ccf4f",
+          "bytes": 1530554748,
+          "destDir": "models/glm-ocr-litert",
+          "destName": "glm_ocr_multimodal_decoder_combined_fp16.tflite"
+        }
+      ]
+    },
+    {
+      "id": "granite",
+      "name": "Granite 4.0 350M (LiteRT-LM)",
+      "license": "Apache-2.0",
+      "source": "https://huggingface.co/litert-community/granite-4.0-350m-litert-lm",
+      "files": [
+        {
+          "url": "https://huggingface.co/litert-community/granite-4.0-350m-litert-lm/resolve/6f1e9bce89b174930a79de82d0dcdede708f8c34/granite-4.0-350m_q8_ekv1280.litertlm",
+          "sha256": "c8e9a29493f62b7c44461fb36980987c4c1454c75e95f57ba0539a8edc9dce76",
+          "bytes": 468209584,
+          "destDir": "models/granite",
+          "destName": "granite-4.0-350m_q8_ekv1280.litertlm"
+        }
+      ]
+    }
+  ]
+}

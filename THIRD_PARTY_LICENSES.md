@@ -24,6 +24,20 @@ are marked `USDA_FOODKEEPER_DE_OVERRIDE` in the data file.
 These figures are estimates for planning purposes and are not food-safety advice. The date printed
 on the packaging always takes precedence.
 
+## Downloaded models
+
+The app does not ship these models. Users download them from Hugging Face; see "Models" in the
+README.
+
+- GLM-OCR ([zai-org/GLM-OCR](https://huggingface.co/zai-org/GLM-OCR)), MIT. The app uses either
+  the GGUF conversion by [ggml-org](https://huggingface.co/ggml-org/GLM-OCR-GGUF) or our LiteRT
+  conversion ([paulbauriegel/digital-fridge-models](https://huggingface.co/paulbauriegel/digital-fridge-models)).
+- Granite 4.0 350M ([litert-community/granite-4.0-350m-litert-lm](https://huggingface.co/litert-community/granite-4.0-350m-litert-lm)),
+  Apache-2.0.
+
 ## Other dependencies
 
-Runtime library licenses are listed in `app/src/main/assets/licenses/`.
+- llama.cpp (MIT), bundled as the arm64 Vulkan runtime. Its licence and build provenance are in
+  `app/src/main/assets/licenses/`.
+- OpenCV, PdfBox-Android, OkHttp and the AndroidX libraries are Apache-2.0.
+- ML Kit and ARCore are used under the Google APIs Terms of Service.

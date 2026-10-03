@@ -38,7 +38,7 @@ source .venv/bin/activate
 pip install -r tools/glm_ocr_litert/requirements.txt
 
 python tools/glm_ocr_litert/convert_glm_ocr_to_litert.py \
-  --image benchmarks/ocr/fixtures/hellweg_b3febdc3_edited_preview.jpg \
+  --image benchmarks/ocr/private/hellweg_b3febdc3_edited_preview.jpg \
   --output-dir tools/glm_ocr_litert/output/hellweg-fp16 \
   --sequence-length 1536
 ```
@@ -60,7 +60,7 @@ docker run --rm --platform linux/amd64 \
   -v "$PWD:/workspace" \
   -v "$HOME/.cache/huggingface:/root/.cache/huggingface" \
   groceries-glm-ocr-litert \
-  --image /workspace/benchmarks/ocr/fixtures/hellweg_b3febdc3_edited_preview.jpg \
+  --image /workspace/benchmarks/ocr/private/hellweg_b3febdc3_edited_preview.jpg \
   --output-dir /workspace/tools/glm_ocr_litert/output/hellweg-fp16
 ```
 
