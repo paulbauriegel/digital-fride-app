@@ -68,7 +68,7 @@ jobs:
         run: |
           tasks=":app:assembleDebug :app:assembleRelease"
           if [ "$SIGNED" = "true" ]; then tasks="$tasks :app:bundleRelease"; fi
-          ./gradlew --no-configuration-cache $tasks $VERSION_ARGS
+          ./gradlew --no-configuration-cache --stacktrace $tasks $VERSION_ARGS
 
       - name: Collect outputs
         run: |
