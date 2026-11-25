@@ -96,7 +96,9 @@ import com.example.groceriesapp.feature.more.SettingsScreen
 import com.example.groceriesapp.feature.overview.OverviewScreen
 import com.example.groceriesapp.feature.receipts.ImportItemsScreen
 import com.example.groceriesapp.feature.receipts.ReceiptDetailScreen
+import com.example.groceriesapp.feature.receipts.ReceiptSyncState
 import com.example.groceriesapp.feature.receipts.ReceiptsScreen
+import com.example.groceriesapp.feature.receipts.storeReceiptSyncer
 import com.example.groceriesapp.feature.review.ReceiptViewerScreen
 import com.example.groceriesapp.feature.scanner.ReceiptPhotoSource
 import com.example.groceriesapp.feature.scanner.ScanSource
@@ -209,6 +211,16 @@ fun GroceriesApp(
     var edekaAuthRequest by remember { mutableStateOf<EdekaAuthRequest?>(null) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    val receiptSyncer = remember(repository, bioCompanyRepository, reweRepository, edekaRepository) {
+        storeReceiptSyncer(
+            context.applicationContext,
+            repository,
+            bioCompanyRepository,
+            reweRepository,
+            edekaRepository,
+        )
+    }
+    val receiptSyncState by receiptSyncer.state.collectAsStateWithLifecycle()
     val expanded = widthSizeClass != WindowWidthSizeClass.Compact
     val ocrRecognizer = remember(context, ocrEngine) {
         receiptOcrRecognizer(context, ocrEngine)
@@ -872,6 +884,9 @@ fun GroceriesApp(
                 bioCompanyConnected = bioCompanyAccount != null,
                 reweConnected = reweAccount != null,
                 edekaConnected = edekaAccount != null,
+                receiptSyncState = receiptSyncState,
+                onSyncReceipts = { scope.launch { receiptSyncer.syncAll() } },
+                onReceiptSyncResultShown = receiptSyncer::acknowledge,
                 onImportRewe = { showReweImport = true },
                 onImportEdeka = { showEdekaImport = true },
                 onTakeReceiptPhoto = ::takeReceiptPhoto,
@@ -1072,6 +1087,9 @@ private fun TopLevelContent(
     bioCompanyConnected: Boolean,
     reweConnected: Boolean,
     edekaConnected: Boolean,
+    receiptSyncState: ReceiptSyncState,
+    onSyncReceipts: () -> Unit,
+    onReceiptSyncResultShown: () -> Unit,
     onImportRewe: () -> Unit,
     onImportEdeka: () -> Unit,
     onTakeReceiptPhoto: () -> Unit,
@@ -1195,6 +1213,9 @@ private fun TopLevelContent(
                 bioCompanyConnected = bioCompanyConnected,
                 reweConnected = reweConnected,
                 edekaConnected = edekaConnected,
+                syncState = receiptSyncState,
+                onSync = onSyncReceipts,
+                onSyncResultShown = onReceiptSyncResultShown,
                 onTakeReceiptPhoto = onTakeReceiptPhoto,
                 onPickReceiptPhoto = onPickReceiptPhoto,
                 onScanLongReceipt = onScanLongReceipt,

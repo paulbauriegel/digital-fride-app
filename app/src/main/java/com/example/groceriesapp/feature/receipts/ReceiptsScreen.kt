@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -18,8 +19,10 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -28,11 +31,16 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -43,6 +51,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import com.example.groceriesapp.data.DigitalReceipt
 import com.example.groceriesapp.data.ReceiptSource
@@ -74,6 +83,9 @@ fun ReceiptsScreen(
     bioCompanyConnected: Boolean,
     reweConnected: Boolean,
     edekaConnected: Boolean,
+    syncState: ReceiptSyncState,
+    onSync: () -> Unit,
+    onSyncResultShown: () -> Unit,
     onTakeReceiptPhoto: () -> Unit,
     onPickReceiptPhoto: () -> Unit,
     onScanLongReceipt: () -> Unit,
@@ -119,13 +131,45 @@ fun ReceiptsScreen(
     // Pinned rather than collapsing: the bar carries the search/filter actions, so it
     // stays put and only picks up the scrolled container colour that marks the boundary.
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
+    val snackbarHostState = remember { SnackbarHostState() }
+    LaunchedEffect(syncState) {
+        val finished = syncState as? ReceiptSyncState.Finished ?: return@LaunchedEffect
+        onSyncResultShown()
+        // Acknowledging resets the state this effect is keyed on, which would cancel a snackbar
+        // shown from here — so it is shown from a scope that outlives the effect.
+        searchScope.launch {
+            snackbarHostState.currentSnackbarData?.dismiss()
+            val action = snackbarHostState.showSnackbar(
+                message = finished.message,
+                actionLabel = if (finished.needsSetup) "Settings" else null,
+                withDismissAction = true,
+                duration = SnackbarDuration.Long,
+            )
+            if (action == SnackbarResult.ActionPerformed) onOpenStoreSettings()
+        }
+    }
     Scaffold(
         modifier = modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { Text("Receipts") },
                 scrollBehavior = scrollBehavior,
                 actions = {
+                    val syncing = syncState is ReceiptSyncState.Running
+                    IconButton(onClick = onSync, enabled = !syncing) {
+                        if (syncing) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp,
+                            )
+                        } else {
+                            Icon(
+                                Icons.Default.Sync,
+                                contentDescription = "Sync receipts from store accounts",
+                            )
+                        }
+                    }
                     IconButton(onClick = { searchScope.launch { searchState.expand() } }) {
                         Icon(Icons.Default.Search, contentDescription = "Search receipts")
                     }
@@ -350,13 +394,17 @@ private fun ReceiptFilter.matches(receipt: DigitalReceipt): Boolean = when (this
 }
 
 /**
- * Buckets an already newest-first list into `Today` / `This Week` / `This Month` / `Earlier`.
- * Empty buckets are dropped so headers only appear when they carry receipts.
+ * Buckets an already newest-first list into `Today` / `This Week` / `This Month`, then one section
+ * per calendar year — the current year included — for everything older. Empty buckets are dropped
+ * so headers only appear when they carry receipts.
  */
-private fun groupByRecency(receipts: List<DigitalReceipt>): List<Pair<String, List<DigitalReceipt>>> {
-    if (receipts.isEmpty()) return emptyList()
-    val zone = ZoneId.systemDefault()
-    val today = LocalDate.now(zone)
+internal fun groupByRecency(
+    receipts: List<DigitalReceipt>,
+    today: LocalDate = LocalDate.now(),
+    zone: ZoneId = ZoneId.systemDefault(),
+): List<Pair<String, List<DigitalReceipt>>> {
+    // Recent buckets sort ahead of every year; years then run newest first.
+    val recentLabels = listOf("Today", "This Week", "This Month")
     return receipts
         .groupBy { receipt ->
             val date = Instant
@@ -367,11 +415,13 @@ private fun groupByRecency(receipts: List<DigitalReceipt>): List<Pair<String, Li
                 !date.isBefore(today) -> 0
                 !date.isBefore(today.minusDays(6)) -> 1
                 date.year == today.year && date.month == today.month -> 2
-                else -> 3
+                else -> recentLabels.size + (today.year - date.year)
             }
         }
         .toSortedMap()
-        .map { (bucket, group) -> RECENCY_LABELS[bucket] to group }
+        .map { (bucket, group) ->
+            val label = recentLabels.getOrNull(bucket)
+                ?: (today.year - (bucket - recentLabels.size)).toString()
+            label to group
+        }
 }
-
-private val RECENCY_LABELS = listOf("Today", "This Week", "This Month", "Earlier")
